@@ -117,30 +117,6 @@ class ProcessPerspective {
      * @returns Returns by the discovered deviations as a list of Deviation instances
      */
     analyze() {
-        let process_flow = new Map()
-        for (var key in this.egsm_model.model_roots) {
-            let root = this.egsm_model.stages.get(this.egsm_model.model_roots[key])
-            root.getHistory().forEach(change => {
-                process_flow.set(change.timestamp, {
-                    name: root.name,
-                    status: change.status,
-                    state: change.state,
-                    compliance: change.compliance
-                })
-            })
-            this._getRecursiveHistory(root, process_flow)
-        }
-
-        let sortedMap = new Map(
-            [...process_flow.entries()].sort((a, b) => {
-                if (a[0] === null) return 1;       // optionally push null to the end
-                if (b[0] === null) return -1;
-                return a[0] < b[0] ? -1 : 1;       // ascending order
-            })
-        );
-
-        console.log('sortedMap:' + sortedMap)
-
         //Process tree traversal to find deviations
         var deviations = []
         for (var key in this.egsm_model.model_roots) {
@@ -155,21 +131,6 @@ class ProcessPerspective {
             this.bpmn_model.applyDeviation(element)
         });
         return deviations
-    }
-
-    _getRecursiveHistory(root, process_flow) {
-        var children = root.children
-        for (var key in children) {
-            this.egsm_model.stages.get(children[key]).getHistory().forEach(change => {
-                process_flow.set(change.timestamp, {
-                    name: children[key].name,
-                    status: change.status,
-                    state: change.state,
-                    compliance: change.compliance
-                })
-            })
-            this._getRecursiveHistory(children[key])
-        }
     }
 
     /**
@@ -345,6 +306,48 @@ class ProcessPerspective {
                             }
                         }
                     }
+                });
+
+                //-OVERLAP deviation-
+                let process_flow = new Map()
+                for (var key in children) {
+                    this.egsm_model.stages.get(children[key]).getHistory().forEach(change => {
+                        process_flow.set(change.timestamp, {
+                            name: change.name,
+                            status: change.status,
+                            state: change.state,
+                            compliance: change.compliance
+                        })
+                    })
+                }
+        
+                let sortedMap = new Map(
+                    [...process_flow.entries()].sort((a, b) => {
+                        if (a[0] === null) return 1;
+                        if (b[0] === null) return -1;
+                        return a[0] < b[0] ? -1 : 1;
+                    })
+                );
+                
+                let overlaps = [];
+                let entries = Array.from(sortedMap.entries());
+
+                for (let i = 0; i < entries.length; i++) {
+                    let [timestamp, item] = entries[i];
+                    if (item.status === "OPEN") {
+                        var overlapped = []
+                        for (let j = i + 1; j < entries.length; j++) {
+                            if (j < entries.length && (entries[j][1].status === "OPEN" || 
+                                    (entries[j][1].status === "CLOSED" && !this.egsm_model.stages.get(entries[j][1].name).getHistory().some(e => e.state === 'OPEN')))) {
+                                overlapped.push(entries[j][1]);
+                            }
+                        }
+                        overlaps.push(new OverlapDeviation(overlapped, item.name))
+                    }
+                }
+
+                overlaps.forEach(overlap => {
+                    deviations.push(overlap)   
                 });
 
                 //If the number of OoO stages is more than the number of skipped stages, then multi-execution of activity,
