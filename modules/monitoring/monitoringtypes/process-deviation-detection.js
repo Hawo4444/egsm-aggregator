@@ -24,7 +24,7 @@ class ProcessDeviationDetection extends Job {
     }
 
     /**
-     * Called when the EngineObserver reveives an event from the Process
+     * Called when the EngineObserver receives an event from the Process
      * @param {Object} messageObj The Event Object 
      */
     onProcessEvent(messageObj) {

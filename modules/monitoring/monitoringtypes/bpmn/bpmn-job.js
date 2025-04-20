@@ -34,7 +34,7 @@ class BpmnJob extends Job {
         var perspective = this.perspectives.get(messageObj.process_perspective)
         var egsm = perspective.egsm_model
         if (egsm.stages.has(messageObj.stage_name)) {
-          if(messageObj.state == 'opened'){
+          if(messageObj.state == 'opened') {
             messageObj.state = 'open'
           }
           egsm.updateStage(messageObj.stage_name, messageObj.status.toUpperCase(), messageObj.state.toUpperCase(), messageObj.compliance.toUpperCase())

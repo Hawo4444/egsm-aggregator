@@ -1,6 +1,6 @@
 const fs = require('fs');
 
-const { ProcessPerspective, SkipDeviation, IncorrectExecutionSequenceDeviation, IncompleteDeviation, MultiExecutionDeviation,
+const { ProcessPerspective, SkipDeviation, OverlapDeviation, IncorrectExecutionSequenceDeviation, IncompleteDeviation, MultiExecutionDeviation,
   IncorrectBranchDeviation } = require('../monitoring/monitoringtypes/bpmn/process-perspective');
 const AUX = require('../egsm-common/auxiliary/auxiliary')
 const LOG = require('../egsm-common/auxiliary/logManager');
@@ -18,40 +18,27 @@ const { BpmnModel } = require('../monitoring/monitoringtypes/bpmn/bpmn-model');
       }
 });*/
 //Test cases
+//SEQUENCE block tests
 test('SEQUENCE - No deviation', async () => {
+  //e, A, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -65,47 +52,42 @@ test('SEQUENCE - No deviation', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = []
   var data = pers1.analyze()
   expect(data).toEqual(expected)
 })
 
-
 test('SEQUENCE - One stage skipped', async () => {
+  //e, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'SKIPPED'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'OUTOFORDER'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -121,45 +103,39 @@ test('SEQUENCE - One stage skipped', async () => {
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new SkipDeviation(['ch3'], 'ch4')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, undefined, 'SKIPPED')
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
+
+  var expected = [new SkipDeviation(['ch2'], 'ch3')]
   var data = pers1.analyze()
   expect(data).toEqual(expected)
 })
 
 test('SEQUENCE - Multiple stages skipped', async () => {
+  //e, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'UNOPENED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'SKIPPED'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'OUTOFORDER'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -174,6 +150,12 @@ test('SEQUENCE - Multiple stages skipped', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, undefined, 'SKIPPED')
+  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
 
   var expected = [new SkipDeviation(['ch2', 'ch3'], 'ch4')]
   var data = pers1.analyze()
@@ -182,39 +164,25 @@ test('SEQUENCE - Multiple stages skipped', async () => {
 })
 
 test('SEQUENCE - Start event skipped', async () => {
+  //A, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'SKIPPED'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -229,6 +197,15 @@ test('SEQUENCE - Start event skipped', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, undefined, 'SKIPPED')
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [new SkipDeviation(['ch1'], 'ch2')]
   var data = pers1.analyze()
@@ -236,40 +213,26 @@ test('SEQUENCE - Start event skipped', async () => {
   expect(data).toEqual(expected)
 })
 
-test('SEQUENCE - Multiple stages including start event skipped', async () => {
+test('SEQUENCE - Last event not executed and parent should be closed', async () => {
+  //e, A, B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'UNOPENED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'SKIPPED'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'OUTOFORDER'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -284,6 +247,107 @@ test('SEQUENCE - Multiple stages including start event skipped', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new SkipDeviation(['ch4'], null)]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE - Only first event executed and parent should be closed', async () => {
+  //e, A, B
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NONE'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'ch1'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'ch3'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new SkipDeviation(['ch4', 'ch3', 'ch2'], null)]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE - Multiple stages including start event skipped', async () => {
+  //f
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NONE'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'ch1'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'ch3'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, undefined, 'SKIPPED')
+  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
 
   var expected = [new SkipDeviation(['ch1', 'ch2', 'ch3'], 'ch4')]
   var data = pers1.analyze()
@@ -292,39 +356,25 @@ test('SEQUENCE - Multiple stages including start event skipped', async () => {
 })
 
 test('SEQUENCE - Multi-execution of a stage', async () => {
+  //e, A, A, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -339,6 +389,18 @@ test('SEQUENCE - Multi-execution of a stage', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch2'])]
   var data = pers1.analyze()
@@ -347,39 +409,25 @@ test('SEQUENCE - Multi-execution of a stage', async () => {
 })
 
 test('SEQUENCE - Incorrect execution sequence including 2 stages', async () => {
+  //e, B, A, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -394,6 +442,16 @@ test('SEQUENCE - Incorrect execution sequence including 2 stages', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined) 
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch2', 'ch3'])]
   var data = pers1.analyze()
@@ -402,41 +460,26 @@ test('SEQUENCE - Incorrect execution sequence including 2 stages', async () => {
 })
 
 test('SEQUENCE - Stage opened but not finished - parent should be closed', async () => {
+  //e, A_s, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -451,48 +494,44 @@ test('SEQUENCE - Stage opened but not finished - parent should be closed', async
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
   var expected = [
-    new IncorrectExecutionSequenceDeviation(['ch3']),
-    new IncompleteDeviation('ch2')]
+    new IncompleteDeviation('ch2'),
+    new OverlapDeviation(['ch3', 'ch4'], 'ch2'),
+    new IncorrectExecutionSequenceDeviation(['ch3'])]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
 test('SEQUENCE - Stage opened but not finished - parent should not be closed', async () => {
+  //e, A_s, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -508,7 +547,17 @@ test('SEQUENCE - Stage opened but not finished - parent should not be closed', a
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+
   var expected = [
+    new IncompleteDeviation('ch2'),
+    new OverlapDeviation(['ch3', 'ch4'], 'ch2'),
     new IncorrectExecutionSequenceDeviation(['ch3'])]
   var data = pers1.analyze()
   console.log(data)
@@ -516,39 +565,25 @@ test('SEQUENCE - Stage opened but not finished - parent should not be closed', a
 })
 
 test('SEQUENCE - Overlapped activities', async () => {
+  //e, B_s, A_s, B_e, A_e, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NONE'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NONE'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'ch1'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'ch1'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
+  ch3.direct_predecessor = 'ch2'
   var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'ch3'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'ch3'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
 
   //Setting up the perspective
@@ -563,6 +598,17 @@ test('SEQUENCE - Overlapped activities', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, undefined, 'SKIPPED')
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [
     new IncorrectExecutionSequenceDeviation(['ch2', 'ch3'])]
@@ -571,33 +617,22 @@ test('SEQUENCE - Overlapped activities', async () => {
   expect(data).toEqual(expected)
 })
 
-
-
 //PARALLEL block tests
 test('PARALLEL - One stage not executed at all - parent should be closed', async () => {
+  //B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -609,6 +644,12 @@ test('PARALLEL - One stage not executed at all - parent should be closed', async
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
     new SkipDeviation(['ch1'], 'NA')]
@@ -618,27 +659,19 @@ test('PARALLEL - One stage not executed at all - parent should be closed', async
 })
 
 test('PARALLEL - One stage not executed at all - parent should not be closed yet', async () => {
+  //B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
 
   //Setting up the perspective
@@ -651,6 +684,11 @@ test('PARALLEL - One stage not executed at all - parent should not be closed yet
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
 
   var expected = []
   var data = pers1.analyze()
@@ -659,29 +697,20 @@ test('PARALLEL - One stage not executed at all - parent should not be closed yet
 })
 
 test('PARALLEL - One stage opened but not closed - parent should be closed', async () => {
+  //A_s, B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -693,6 +722,13 @@ test('PARALLEL - One stage opened but not closed - parent should be closed', asy
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
     new IncompleteDeviation('ch1')]
@@ -702,27 +738,19 @@ test('PARALLEL - One stage opened but not closed - parent should be closed', asy
 })
 
 test('PARALLEL - One stage opened but not closed - parent should not be closed yet', async () => {
+  //A_s, B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
 
   //Setting up the perspective
@@ -736,6 +764,12 @@ test('PARALLEL - One stage opened but not closed - parent should not be closed y
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+
   var expected = []
   var data = pers1.analyze()
   console.log(data)
@@ -743,35 +777,23 @@ test('PARALLEL - One stage opened but not closed - parent should not be closed y
 })
 
 test('PARALLEL - Multiple stages not executed - parent should be closed', async () => {
+  //C
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'UNOPENED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -784,6 +806,12 @@ test('PARALLEL - Multiple stages not executed - parent should be closed', async 
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
     new SkipDeviation(['ch1'], 'NA'),
@@ -794,25 +822,17 @@ test('PARALLEL - Multiple stages not executed - parent should be closed', async 
 })
 
 test('PARALLEL - Multiple stages not executed - parent should not be closed yet', async () => {
+  //C
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'UNOPENED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
@@ -820,7 +840,7 @@ test('PARALLEL - Multiple stages not executed - parent should not be closed yet'
   stage1.status = 'REGULAR'
   stage1.state = 'OPEN'
   stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -834,6 +854,11 @@ test('PARALLEL - Multiple stages not executed - parent should not be closed yet'
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSE', undefined)
 
   var expected = []
   var data = pers1.analyze()
@@ -842,35 +867,23 @@ test('PARALLEL - Multiple stages not executed - parent should not be closed yet'
 })
 
 test('PARALLEL - Multi-executing a stage - parent should be closed', async () => {
+  //A, B, A, C
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'OUTOFORDER'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -883,6 +896,19 @@ test('PARALLEL - Multi-executing a stage - parent should be closed', async () =>
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSE', undefined)
+  stage1.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new MultiExecutionDeviation('ch1')]
   var data = pers1.analyze()
@@ -891,33 +917,22 @@ test('PARALLEL - Multi-executing a stage - parent should be closed', async () =>
 })
 
 test('PARALLEL - Multi-executing a stage - parent should not be closed yet', async () => {
+  //A, B, A, C
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'OUTOFORDER'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -931,6 +946,18 @@ test('PARALLEL - Multi-executing a stage - parent should not be closed yet', asy
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSE', undefined)
+  stage1.update(undefined, 'CLOSE', undefined)
 
   var expected = [new MultiExecutionDeviation('ch1')]
   var data = pers1.analyze()
@@ -938,37 +965,24 @@ test('PARALLEL - Multi-executing a stage - parent should not be closed yet', asy
   expect(data).toEqual(expected)
 })
 
-
 test('PARALLEL - Multi-executing more than one stages - parent should be closed', async () => {
+  //A, B, A, B, C
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'OUTOFORDER'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -981,6 +995,21 @@ test('PARALLEL - Multi-executing more than one stages - parent should be closed'
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSE', undefined)
+  stage1.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new MultiExecutionDeviation('ch1'),
   new MultiExecutionDeviation('ch2')]
@@ -990,33 +1019,22 @@ test('PARALLEL - Multi-executing more than one stages - parent should be closed'
 })
 
 test('PARALLEL - Multi-executing more than one stages - parent should not be closed yet', async () => {
+  //A, B, A, B, C
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'OUTOFORDER'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'PARALLEL'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1030,6 +1048,20 @@ test('PARALLEL - Multi-executing more than one stages - parent should not be clo
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSE', undefined)
+  stage1.update(undefined, 'CLOSE', undefined)
 
   var expected = [new MultiExecutionDeviation('ch1'),
   new MultiExecutionDeviation('ch2')]
@@ -1038,36 +1070,24 @@ test('PARALLEL - Multi-executing more than one stages - parent should not be clo
   expect(data).toEqual(expected)
 })
 
-
-//Exclusive block tests
+//EXCLUSIVE block tests - A(ch1) is the correct branch
 test('EXCLUSIVE - Executing and incorrect branch', async () => {
+  //B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1081,6 +1101,11 @@ test('EXCLUSIVE - Executing and incorrect branch', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1089,35 +1114,23 @@ test('EXCLUSIVE - Executing and incorrect branch', async () => {
 })
 
 test('EXCLUSIVE - Partially executing the correct branch - parent should be closed', async () => {
+  //A_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'UNOPENED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -1130,6 +1143,11 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should be clos
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncompleteDeviation('ch1')]
   var data = pers1.analyze()
@@ -1138,33 +1156,22 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should be clos
 })
 
 test('EXCLUSIVE - Partially executing the correct branch - parent should not be closed', async () => {
+  //A_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'UNOPENED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1178,6 +1185,10 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should not be 
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
 
   var expected = []
   var data = pers1.analyze()
@@ -1185,36 +1196,25 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should not be 
   expect(data).toEqual(expected)
 })
 
+//Check skip here
 test('EXCLUSIVE - Partially executing an incorrect branch - parent should be closed', async () => {
+  //B_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'SKIPPED'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -1228,40 +1228,35 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should be clo
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncompleteDeviation('ch2'), new SkipDeviation(['ch1'], 'NA')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+  ch1.update(undefined, undefined, 'SKIPPED')
+
+  var expected = [new IncompleteDeviation('ch2'), new IncorrectBranchDeviation('ch2'), new SkipDeviation(['ch1'], 'NA')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
 test('EXCLUSIVE - Partially executing an incorrect branch - parent should not be closed', async () => {
+  //B_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'UNOPENED'
-  ch1.compliance = 'SKIPPED'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1276,53 +1271,9 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should not be
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new SkipDeviation(['ch1'], 'NA')]
-  var data = pers1.analyze()
-  console.log(data)
-  expect(data).toEqual(expected)
-})
-
-test('EXCLUSIVE - Partially executing a correct branch and executing and incorrect one - parent should not be closed', async () => {
-  //Children stages
-  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
-  ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
-  ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
-
-  //Parent stage
-  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
-  stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-
-  //Setting up the perspective
-  var eGSM = new EgsmModel()
-  var bpmn = new BpmnModel('pers1')
-  eGSM.model_roots.push('parent')
-  eGSM.stages.set('parent', stage1)
-  eGSM.stages.set('ch1', ch1)
-  eGSM.stages.set('ch2', ch2)
-  eGSM.stages.set('ch3', ch3)
-  var pers1 = new ProcessPerspective('pers-1')
-  pers1.egsm_model = eGSM
-  pers1.bpmn_model = bpmn
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
 
   var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1330,34 +1281,67 @@ test('EXCLUSIVE - Partially executing a correct branch and executing and incorre
   expect(data).toEqual(expected)
 })
 
-test('EXCLUSIVE - Partially executing a correct branch and executing and incorrect one - parent should be closed', async () => {
+test('EXCLUSIVE - Partially executing a correct branch and executing an incorrect one - parent should not be closed', async () => {
+  //A_s, B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
+
+  var expected = [new IncorrectBranchDeviation('ch2')]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+//Check skip here
+test('EXCLUSIVE - Partially executing a correct branch and executing an incorrect one - parent should be closed', async () => {
+  //A_s, B
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'NA'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'EXCLUSIVE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -1372,6 +1356,13 @@ test('EXCLUSIVE - Partially executing a correct branch and executing and incorre
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncompleteDeviation('ch1'), new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1380,33 +1371,22 @@ test('EXCLUSIVE - Partially executing a correct branch and executing and incorre
 })
 
 test('EXCLUSIVE - Partially executing an incorrect branch and executing the correct one - parent should be closed', async () => {
+  //B_s, A
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -1421,6 +1401,13 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncompleteDeviation('ch2'), new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1428,83 +1415,23 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
   expect(data).toEqual(expected)
 })
 
-test('EXCLUSIVE - Partially executing a correct branch and executing and incorrect one - parent should be closed', async () => {
-  //Children stages
-  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
-  ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
-  ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
-
-  //Parent stage
-  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
-  stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
-
-  //Setting up the perspective
-  var eGSM = new EgsmModel()
-  var bpmn = new BpmnModel('pers1')
-  eGSM.model_roots.push('parent')
-  eGSM.stages.set('parent', stage1)
-  eGSM.stages.set('ch1', ch1)
-  eGSM.stages.set('ch2', ch2)
-  eGSM.stages.set('ch3', ch3)
-  var pers1 = new ProcessPerspective('pers-1')
-  pers1.egsm_model = eGSM
-  pers1.bpmn_model = bpmn
-
-  var expected = [new IncompleteDeviation('ch1'), new IncorrectBranchDeviation('ch2')]
-  var data = pers1.analyze()
-  console.log(data)
-  expect(data).toEqual(expected)
-})
-
 test('EXCLUSIVE - Partially executing an incorrect branch and executing the correct one - parent should not be closed', async () => {
+  //B_s, A
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1518,6 +1445,12 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1526,33 +1459,22 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
 })
 
 test('EXCLUSIVE - Overlapped executions', async () => {
+  //A_s, B_s, A_e
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'OUTOFORDER'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'EXCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1567,41 +1489,37 @@ test('EXCLUSIVE - Overlapped executions', async () => {
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectBranchDeviation('ch1'), new IncorrectBranchDeviation('ch2')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'CLOSE', undefined)
+
+  var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
-//Inclusive Block tests
+//INCLUSIVE block tests
+//A(ch1) and B(ch2) are the correct branches
 test('INCLUSIVE - Executing one of the correct branches twice', async () => {
+  //A, A, B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'OUTOFORDER'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'INCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1615,6 +1533,16 @@ test('INCLUSIVE - Executing one of the correct branches twice', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  stage1.update(undefined, 'CLOSE', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch1')]
   var data = pers1.analyze()
@@ -1623,35 +1551,23 @@ test('INCLUSIVE - Executing one of the correct branches twice', async () => {
 })
 
 test('INCLUSIVE - Executing one of the correct branches partially only - parent should be closed', async () => {
+  //B, A_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'INCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -1664,6 +1580,13 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncompleteDeviation('ch1')]
   var data = pers1.analyze()
@@ -1672,33 +1595,22 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
 })
 
 test('INCLUSIVE - Executing one of the correct branches partially only - parent should not be closed yet', async () => {
+  //B, A_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'UNOPENED'
-  ch3.compliance = 'ONTIME'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'INCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1712,6 +1624,12 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
 
   var expected = []
   var data = pers1.analyze()
@@ -1720,33 +1638,22 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
 })
 
 test('INCLUSIVE - Executing unintended branch beside the correct ones', async () => {
+  //C, A, B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'INCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1760,6 +1667,16 @@ test('INCLUSIVE - Executing unintended branch beside the correct ones', async ()
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  stage1.update(undefined, 'CLOSE', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
@@ -1767,34 +1684,24 @@ test('INCLUSIVE - Executing unintended branch beside the correct ones', async ()
   expect(data).toEqual(expected)
 })
 
+//A(ch1) is the correct branch
 test('INCLUSIVE - Executing multiple unintended branches beside the correct one', async () => {
+  //B, C, A
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
   var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'NA'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
+  ch3.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'INCLUSIVE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2', 'ch3']
 
   //Setting up the perspective
@@ -1809,34 +1716,38 @@ test('INCLUSIVE - Executing multiple unintended branches beside the correct one'
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage1.update(undefined, 'CLOSE', undefined)
+
   var expected = [new IncorrectBranchDeviation('ch2'), new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
+//ITERATION block tests - A(ch1) -> B(ch2)
+//Don't think this is even possible
 test('ITERATION - Incorrect execution sequence - 1 stage', async () => {
+  //B, A
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'OUTOFORDER'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'ITERATION'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
 
   //Setting up the perspective
@@ -1850,23 +1761,31 @@ test('ITERATION - Incorrect execution sequence - 1 stage', async () => {
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch1'])]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+
+  var expected = [new IncorrectExecutionSequenceDeviation(['ch2'])]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
+//Don't think this is even possible
 test('ITERATION - Incorrect execution sequence - 2 stages', async () => {
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
+  ch1.direct_predecessor = 'NA'
   ch1.status = 'REGULAR'
   ch1.state = 'CLOSED'
   ch1.compliance = 'OUTOFORDER'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
+  ch2.direct_predecessor = 'NA'
   ch2.status = 'REGULAR'
   ch2.state = 'CLOSED'
   ch2.compliance = 'OUTOFORDER'
@@ -1877,7 +1796,7 @@ test('ITERATION - Incorrect execution sequence - 2 stages', async () => {
   stage1.status = 'REGULAR'
   stage1.state = 'OPEN'
   stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
 
   //Setting up the perspective
@@ -1898,27 +1817,19 @@ test('ITERATION - Incorrect execution sequence - 2 stages', async () => {
 })
 
 test('ITERATION - Skipping A1', async () => {
+  //B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'SKIPPED'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'OUTOFORDER'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'ITERATION'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
 
   //Setting up the perspective
@@ -1931,6 +1842,12 @@ test('ITERATION - Skipping A1', async () => {
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, undefined, 'SKIPPED')
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch2']), new SkipDeviation(['ch1'], 'NA')]
   var data = pers1.analyze()
@@ -1938,28 +1855,20 @@ test('ITERATION - Skipping A1', async () => {
   expect(data).toEqual(expected)
 })
 
-test('ITERATION - Incomplete execution of one stage - parent should not be executed yet', async () => {
+test('ITERATION - Incomplete execution of one stage - parent should not be closed yet', async () => {
+  //A, B_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'ITERATION'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
 
   //Setting up the perspective
@@ -1973,34 +1882,32 @@ test('ITERATION - Incomplete execution of one stage - parent should not be execu
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+
   var expected = []
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
-test('ITERATION - Incomplete execution of 2 stages - parent should not be executed yet', async () => {
+test('ITERATION - Incomplete execution of 2 stages - parent should not be closed yet', async () => {
+  //A_s, B_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'ITERATION'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
 
   //Setting up the perspective
@@ -2014,78 +1921,72 @@ test('ITERATION - Incomplete execution of 2 stages - parent should not be execut
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = []
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+
+  var expected = [new IncorrectExecutionSequenceDeviation(['ch2'])]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
-test('ITERATION - Incomplete execution of one stage - parent should be executed', async () => {
+test('ITERATION - Incomplete execution of one stage - parent should be closed', async () => {
+  //A, B_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'ITERATION'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  //Setting up the perspective
-  var eGSM = new EgsmModel()
-  var bpmn = new BpmnModel('pers1')
-  eGSM.model_roots.push('parent')
-  eGSM.stages.set('parent', stage1)
-  eGSM.stages.set('ch1', ch1)
-  eGSM.stages.set('ch2', ch2)
-  var pers1 = new ProcessPerspective('pers-1')
-  pers1.egsm_model = eGSM
-  pers1.bpmn_model = bpmn
-
-  var expected = [new IncompleteDeviation('ch1')]
+  var expected = [new IncompleteDeviation('ch2')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
 test('ITERATION - Incomplete execution of 2 stages - parent should be executed', async () => {
+  //A_s, B_s
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'OPEN'
-  ch1.compliance = 'ONTIME'
+  ch1.direct_predecessor = 'NA'
   var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
   ch2.type = 'ACTIVITY'
-  ch2.direct_successor = 'NA'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
+  ch2.direct_predecessor = 'NA'
 
   //Parent stage
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'ITERATION'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
+  stage1.direct_predecessor = 'NONE'
   stage1.children = ['ch1', 'ch2']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -2098,57 +1999,46 @@ test('ITERATION - Incomplete execution of 2 stages - parent should be executed',
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncompleteDeviation('ch1'), new IncompleteDeviation('ch2')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new IncorrectExecutionSequenceDeviation(['ch2']), new IncompleteDeviation('ch1'), new IncompleteDeviation('ch2')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
-
+//Combined blocks tests
+//SEQUENCE&PARALLEL blocks tests - e(ch1) -> A(ch2)+B(ch3) -> f(ch4)
 test('SEQUENCE&PARALLEL - Missing parallel stage execution', async () => {
+  //e, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parallel', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parallel', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
-  var ch4 = new EgsmStage('ch4', 'ch4', 'ch2', 'EXCEPTION', '')
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'NA'
-  ch4.status = 'REGULAR'
-  ch4.state = 'OPEN'
-  ch4.compliance = 'ONTIME'
-  var ch5 = new EgsmStage('ch5', 'ch5', 'ch2', 'EXCEPTION', '')
-  ch5.type = 'ACTIVITY'
-  ch5.direct_successor = 'NA'
-  ch5.status = 'REGULAR'
-  ch5.state = 'CLOSED'
-  ch5.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'parallel'
 
-  //Parent stage
+  //Parent stages
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'parallel', 'ch4']
 
-  ch2.type = 'PARALLEL'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
-  ch2.direct_successor = 'ch1'
-  ch2.children = ['ch4', 'ch5']
+  var stage2 = new EgsmStage('parallel', 'parallel', 'parent', 'EXCEPTION', '')
+  stage2.type = 'PARALLEL'
+  stage2.direct_predecessor = 'ch1'
+  stage2.children = ['ch2', 'ch3']
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -2156,64 +2046,55 @@ test('SEQUENCE&PARALLEL - Missing parallel stage execution', async () => {
   eGSM.model_roots.push('parent')
   eGSM.stages.set('parent', stage1)
   eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('parallel', stage2)
   eGSM.stages.set('ch2', ch2)
   eGSM.stages.set('ch3', ch3)
   eGSM.stages.set('ch4', ch4)
-  eGSM.stages.set('ch5', ch5)
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch3']), new IncompleteDeviation('ch2'), new IncompleteDeviation('ch4')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, undefined, 'SKIPPED')
+  stage2.propagateCondition('SHOULD_BE_CLOSED')
+  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new SkipDeviation(['parallel'], 'ch4')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
+// Check shouldbeclosed propagation to parallel - would it actually happen? - wasn't in the original code
 test('SEQUENCE&PARALLEL - Incomplete parallel stage execution', async () => {
+  //e, A_s, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parallel', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parallel', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
-  var ch4 = new EgsmStage('ch4', 'ch4', 'ch2', 'EXCEPTION', '')
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'NA'
-  ch4.status = 'REGULAR'
-  ch4.state = 'OPEN'
-  ch4.compliance = 'ONTIME'
-  var ch5 = new EgsmStage('ch5', 'ch5', 'ch2', 'EXCEPTION', '')
-  ch5.type = 'ACTIVITY'
-  ch5.direct_successor = 'NA'
-  ch5.status = 'REGULAR'
-  ch5.state = 'CLOSED'
-  ch5.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'parallel'
 
-  //Parent stage
+  //Parent stages
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'OPEN'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'parallel', 'ch4']
 
-  ch2.type = 'PARALLEL'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
-  ch2.direct_successor = 'ch1'
-  ch2.children = ['ch4', 'ch5']
+  var stage2 = new EgsmStage('parallel', 'parallel', 'parent', 'EXCEPTION', '')
+  stage2.type = 'PARALLEL'
+  stage2.direct_predecessor = 'ch1'
+  stage2.children = ['ch2', 'ch3']
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -2221,64 +2102,58 @@ test('SEQUENCE&PARALLEL - Incomplete parallel stage execution', async () => {
   eGSM.model_roots.push('parent')
   eGSM.stages.set('parent', stage1)
   eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('parallel', stage2)
   eGSM.stages.set('ch2', ch2)
   eGSM.stages.set('ch3', ch3)
   eGSM.stages.set('ch4', ch4)
-  eGSM.stages.set('ch5', ch5)
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch3']), new IncompleteDeviation('ch2'), new IncompleteDeviation('ch4')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  //stage2.propagateCondition('SHOULD_BE_CLOSED')
+  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('parallel'), new IncompleteDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
+//Consider adding test where both branches close and then the one reopens so parent reopens
 test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async () => {
+  //e, A, A, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parallel', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parallel', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
-  var ch4 = new EgsmStage('ch4', 'ch4', 'ch2', 'EXCEPTION', '')
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'NA'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'OUTOFORDER'
-  var ch5 = new EgsmStage('ch5', 'ch5', 'ch2', 'EXCEPTION', '')
-  ch5.type = 'ACTIVITY'
-  ch5.direct_successor = 'NA'
-  ch5.status = 'REGULAR'
-  ch5.state = 'CLOSED'
-  ch5.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'parallel'
 
-  //Parent stage
+  //Parent stages
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'parallel', 'ch4']
 
-  ch2.type = 'PARALLEL'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
-  ch2.direct_successor = 'ch1'
-  ch2.children = ['ch4', 'ch5']
+  var stage2 = new EgsmStage('parallel', 'parallel', 'parent', 'EXCEPTION', '')
+  stage2.type = 'PARALLEL'
+  stage2.direct_predecessor = 'ch1'
+  stage2.children = ['ch2', 'ch3']
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -2286,64 +2161,60 @@ test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async ()
   eGSM.model_roots.push('parent')
   eGSM.stages.set('parent', stage1)
   eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('parallel', stage2)
   eGSM.stages.set('ch2', ch2)
   eGSM.stages.set('ch3', ch3)
   eGSM.stages.set('ch4', ch4)
-  eGSM.stages.set('ch5', ch5)
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new MultiExecutionDeviation('ch4')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, 'CLOSE', undefined)
+  ch4.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new MultiExecutionDeviation('ch2')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
-test('SEQUENCE&EXCLUSIVE - Executing and incorrect exclusive branch', async () => {
+test('SEQUENCE&EXCLUSIVE - Executing an incorrect exclusive branch', async () => {
+  //e, B, A, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'exclusive', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'exclusive', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'ONTIME'
-  var ch4 = new EgsmStage('ch4', 'ch4', 'ch2', 'EXCEPTION', '')
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'NA'
-  ch4.status = 'REGULAR'
-  ch4.state = 'CLOSED'
-  ch4.compliance = 'OUTOFORDER'
-  var ch5 = new EgsmStage('ch5', 'ch5', 'ch2', 'EXCEPTION', '')
-  ch5.type = 'ACTIVITY'
-  ch5.direct_successor = 'NA'
-  ch5.status = 'REGULAR'
-  ch5.state = 'CLOSED'
-  ch5.compliance = 'ONTIME'
+  ch4.direct_predecessor = 'exclusive'
 
-  //Parent stage
+  //Parent stages
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'exclusive', 'ch4']
 
-  ch2.type = 'EXCLUSIVE'
-  ch2.status = 'REGULAR'
-  ch2.state = 'CLOSED'
-  ch2.compliance = 'ONTIME'
-  ch2.direct_successor = 'ch1'
-  ch2.children = ['ch4', 'ch5']
+  var stage2 = new EgsmStage('exclusive', 'exclusive', 'parent', 'EXCEPTION', '')
+  stage2.type = 'EXCLUSIVE'
+  stage2.direct_predecessor = 'ch1'
+  stage2.children = ['ch2', 'ch3']
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -2351,64 +2222,58 @@ test('SEQUENCE&EXCLUSIVE - Executing and incorrect exclusive branch', async () =
   eGSM.model_roots.push('parent')
   eGSM.stages.set('parent', stage1)
   eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('exclusive', stage2)
   eGSM.stages.set('ch2', ch2)
   eGSM.stages.set('ch3', ch3)
   eGSM.stages.set('ch4', ch4)
-  eGSM.stages.set('ch5', ch5)
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectBranchDeviation('ch4')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, 'CLOSE', undefined)
+  ch4.update(undefined, 'CLOSE', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
 test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-desired', async () => {
+  //e, B, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'exclusive', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'exclusive', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
-  var ch4 = new EgsmStage('ch4', 'ch4', 'ch2', 'EXCEPTION', '')
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'NA'
-  ch4.status = 'REGULAR'
-  ch4.state = 'UNOPENED'
-  ch4.compliance = 'SKIPPED'
-  var ch5 = new EgsmStage('ch5', 'ch5', 'ch2', 'EXCEPTION', '')
-  ch5.type = 'ACTIVITY'
-  ch5.direct_successor = 'NA'
-  ch5.status = 'REGULAR'
-  ch5.state = 'CLOSED'
-  ch5.compliance = 'OUTOFORDER'
+  ch4.direct_predecessor = 'exclusive'
 
-  //Parent stage
+  //Parent stages
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'exclusive', 'ch4']
 
-  ch2.type = 'EXCLUSIVE'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
-  ch2.direct_successor = 'ch1'
-  ch2.children = ['ch4', 'ch5']
+  var stage2 = new EgsmStage('exclusive', 'exclusive', 'parent', 'EXCEPTION', '')
+  stage2.type = 'EXCLUSIVE'
+  stage2.direct_predecessor = 'ch1'
+  stage2.children = ['ch2', 'ch3']
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -2416,64 +2281,58 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
   eGSM.model_roots.push('parent')
   eGSM.stages.set('parent', stage1)
   eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('exclusive', stage2)
   eGSM.stages.set('ch2', ch2)
   eGSM.stages.set('ch3', ch3)
   eGSM.stages.set('ch4', ch4)
-  eGSM.stages.set('ch5', ch5)
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch3']), new IncompleteDeviation('ch2'), new IncorrectBranchDeviation('ch5'), new SkipDeviation(['ch4'], 'NA')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, undefined, 'SKIPPED')
+  //propagate? if so, in what order?
+  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('exclusive'), new IncorrectBranchDeviation('ch3'), new SkipDeviation(['ch2'], 'NA')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
+//Wouldn't A be skipped?
 test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
+  //e, B, f - A was the only correct branch
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'inclusive', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'inclusive', 'EXCEPTION', '')
   ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
-  var ch4 = new EgsmStage('ch4', 'ch4', 'ch2', 'EXCEPTION', '')
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
   ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'NA'
-  ch4.status = 'REGULAR'
-  ch4.state = 'UNOPENED'
-  ch4.compliance = 'ONTIME'
-  var ch5 = new EgsmStage('ch5', 'ch5', 'ch2', 'EXCEPTION', '')
-  ch5.type = 'ACTIVITY'
-  ch5.direct_successor = 'NA'
-  ch5.status = 'REGULAR'
-  ch5.state = 'CLOSED'
-  ch5.compliance = 'OUTOFORDER'
+  ch4.direct_predecessor = 'inclusive'
 
-  //Parent stage
+  //Parent stages
   var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
   stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'inclusive', 'ch4']
 
-  ch2.type = 'INCLUSIVE'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
-  ch2.direct_successor = 'ch1'
-  ch2.children = ['ch4', 'ch5']
+  var stage2 = new EgsmStage('inclusive', 'inclusive', 'parent', 'EXCEPTION', '')
+  stage2.type = 'INCLUSIVE'
+  stage2.direct_predecessor = 'ch1'
+  stage2.children = ['ch2', 'ch3']
 
   //Setting up the perspective
   var eGSM = new EgsmModel()
@@ -2481,80 +2340,83 @@ test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
   eGSM.model_roots.push('parent')
   eGSM.stages.set('parent', stage1)
   eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('inclusive', stage2)
   eGSM.stages.set('ch2', ch2)
   eGSM.stages.set('ch3', ch3)
   eGSM.stages.set('ch4', ch4)
-  eGSM.stages.set('ch5', ch5)
   var pers1 = new ProcessPerspective('pers-1')
   pers1.egsm_model = eGSM
   pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch3']), new IncompleteDeviation('ch2'), new IncorrectBranchDeviation('ch5')]
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSE', undefined)
+  stage2.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, undefined, 'SKIPPED')//not sure here
+  //propagate? if so, in what order?
+  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('inclusive'), new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
 test('SEQUENCE&INCLUSIVE - Incomplete branch execution', async () => {
-  //Children stages
-  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
-  ch1.type = 'ACTIVITY'
-  ch1.direct_successor = 'NA'
-  ch1.status = 'REGULAR'
-  ch1.state = 'CLOSED'
-  ch1.compliance = 'ONTIME'
-  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
-  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
-  ch3.type = 'ACTIVITY'
-  ch3.direct_successor = 'ch2'
-  ch3.status = 'REGULAR'
-  ch3.state = 'CLOSED'
-  ch3.compliance = 'OUTOFORDER'
-  var ch4 = new EgsmStage('ch4', 'ch4', 'ch2', 'EXCEPTION', '')
-  ch4.type = 'ACTIVITY'
-  ch4.direct_successor = 'NA'
-  ch4.status = 'REGULAR'
-  ch4.state = 'UNOPENED'
-  ch4.compliance = 'ONTIME'
-  var ch5 = new EgsmStage('ch5', 'ch5', 'ch2', 'EXCEPTION', '')
-  ch5.type = 'ACTIVITY'
-  ch5.direct_successor = 'NA'
-  ch5.status = 'REGULAR'
-  ch5.state = 'OPEN'
-  ch5.compliance = 'ONTIME'
+//e, B_s, f - both A and B were correct branches
+ //Children stages
+ var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+ ch1.type = 'ACTIVITY'
+ ch1.direct_predecessor = 'NA'
+ var ch2 = new EgsmStage('ch2', 'ch2', 'inclusive', 'EXCEPTION', '')
+ ch2.type = 'ACTIVITY'
+ ch2.direct_predecessor = 'NA'
+ var ch3 = new EgsmStage('ch3', 'ch3', 'inclusive', 'EXCEPTION', '')
+ ch3.type = 'ACTIVITY'
+ ch3.direct_predecessor = 'ch2'
+ var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+ ch4.type = 'ACTIVITY'
+ ch4.direct_predecessor = 'inclusive'
 
-  //Parent stage
-  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
-  stage1.type = 'SEQUENCE'
-  stage1.status = 'REGULAR'
-  stage1.state = 'CLOSED'
-  stage1.compliance = 'ONTIME'
-  stage1.direct_successor = 'NONE'
-  stage1.children = ['ch1', 'ch2', 'ch3']
-  stage1.propagateCondition('SHOULD_BE_CLOSED')
+ //Parent stages
+ var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+ stage1.type = 'SEQUENCE'
+ stage1.direct_predecessor = 'NONE'
+ stage1.children = ['ch1', 'inclusive', 'ch4']
 
-  ch2.type = 'INCLUSIVE'
-  ch2.status = 'REGULAR'
-  ch2.state = 'OPEN'
-  ch2.compliance = 'ONTIME'
-  ch2.direct_successor = 'ch1'
-  ch2.children = ['ch4', 'ch5']
+ var stage2 = new EgsmStage('inclusive', 'inclusive', 'parent', 'EXCEPTION', '')
+ stage2.type = 'INCLUSIVE'
+ stage2.direct_predecessor = 'ch1'
+ stage2.children = ['ch2', 'ch3']
 
-  //Setting up the perspective
-  var eGSM = new EgsmModel()
-  var bpmn = new BpmnModel('pers1')
-  eGSM.model_roots.push('parent')
-  eGSM.stages.set('parent', stage1)
-  eGSM.stages.set('ch1', ch1)
-  eGSM.stages.set('ch2', ch2)
-  eGSM.stages.set('ch3', ch3)
-  eGSM.stages.set('ch4', ch4)
-  eGSM.stages.set('ch5', ch5)
-  var pers1 = new ProcessPerspective('pers-1')
-  pers1.egsm_model = eGSM
-  pers1.bpmn_model = bpmn
+ //Setting up the perspective
+ var eGSM = new EgsmModel()
+ var bpmn = new BpmnModel('pers1')
+ eGSM.model_roots.push('parent')
+ eGSM.stages.set('parent', stage1)
+ eGSM.stages.set('ch1', ch1)
+ eGSM.stages.set('inclusive', stage2)
+ eGSM.stages.set('ch2', ch2)
+ eGSM.stages.set('ch3', ch3)
+ eGSM.stages.set('ch4', ch4)
+ var pers1 = new ProcessPerspective('pers-1')
+ pers1.egsm_model = eGSM
+ pers1.bpmn_model = bpmn
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch3']), new IncompleteDeviation('ch2'), new IncompleteDeviation('ch5')]
+ //Simulating the process flow
+ stage1.update(undefined, 'OPEN', undefined)
+ ch1.update(undefined, 'CLOSE', undefined)
+ stage2.update(undefined, 'OPEN', undefined)
+ ch3.update(undefined, 'OPEN', undefined)
+ ch2.update(undefined, undefined, 'SKIPPED')//not sure here
+ //propagate? if so, in what order?
+ ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+ stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('inclusive'), new IncompleteDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
