@@ -402,7 +402,120 @@ test('SEQUENCE - Multi-execution of a stage', async () => {
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch2'])]
+  var expected = [
+    new MultiExecutionDeviation('ch2', 2)]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE - Multi-execution of a stage more than twice', async () => {
+  //e, A, A, B, A, A, f
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NONE'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'ch1'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'ch3'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new MultiExecutionDeviation('ch2', 4)]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE - Multi-execution of an event more than twice', async () => {
+  //e, e, A, e, B, f
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NONE'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'ch1'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'ch3'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch1.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new MultiExecutionDeviation('ch1', 3)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -446,6 +559,7 @@ test('SEQUENCE - Incorrect execution sequence including 2 stages', async () => {
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined) 
+  ch2.update(undefined, undefined, 'SKIPPED')
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
@@ -453,7 +567,7 @@ test('SEQUENCE - Incorrect execution sequence including 2 stages', async () => {
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch2', 'ch3'])]
+  var expected = [new IncorrectExecutionSequenceDeviation('ch2', 'ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -504,9 +618,8 @@ test('SEQUENCE - Stage opened but not finished - parent should be closed', async
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new IncompleteDeviation('ch2'),
     new OverlapDeviation(['ch3', 'ch4'], 'ch2'),
-    new IncorrectExecutionSequenceDeviation(['ch3'])]
+    new IncompleteDeviation('ch2')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -556,9 +669,8 @@ test('SEQUENCE - Stage opened but not finished - parent should not be closed', a
   ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new IncompleteDeviation('ch2'),
     new OverlapDeviation(['ch3', 'ch4'], 'ch2'),
-    new IncorrectExecutionSequenceDeviation(['ch3'])]
+    new IncompleteDeviation('ch2')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -611,7 +723,8 @@ test('SEQUENCE - Overlapped activities', async () => {
   stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new IncorrectExecutionSequenceDeviation(['ch2', 'ch3'])]
+    new OverlapDeviation(['ch2'], 'ch3'),
+    new IncorrectExecutionSequenceDeviation('ch2', 'ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -648,7 +761,7 @@ test('PARALLEL - One stage not executed at all - parent should be closed', async
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
@@ -688,7 +801,7 @@ test('PARALLEL - One stage not executed at all - parent should not be closed yet
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
 
   var expected = []
   var data = pers1.analyze()
@@ -727,7 +840,7 @@ test('PARALLEL - One stage opened but not closed - parent should be closed', asy
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
@@ -768,7 +881,7 @@ test('PARALLEL - One stage opened but not closed - parent should not be closed y
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
 
   var expected = []
   var data = pers1.analyze()
@@ -810,7 +923,7 @@ test('PARALLEL - Multiple stages not executed - parent should be closed', async 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', undefined)
-  ch3.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
@@ -858,7 +971,7 @@ test('PARALLEL - Multiple stages not executed - parent should not be closed yet'
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', undefined)
-  ch3.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
 
   var expected = []
   var data = pers1.analyze()
@@ -900,14 +1013,14 @@ test('PARALLEL - Multi-executing a stage - parent should be closed', async () =>
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
-  ch3.update(undefined, 'CLOSE', undefined)
-  stage1.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new MultiExecutionDeviation('ch1')]
@@ -950,14 +1063,14 @@ test('PARALLEL - Multi-executing a stage - parent should not be closed yet', asy
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
-  ch3.update(undefined, 'CLOSE', undefined)
-  stage1.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new MultiExecutionDeviation('ch1')]
   var data = pers1.analyze()
@@ -999,20 +1112,21 @@ test('PARALLEL - Multi-executing more than one stages - parent should be closed'
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
-  ch3.update(undefined, 'CLOSE', undefined)
-  stage1.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new MultiExecutionDeviation('ch1'),
-  new MultiExecutionDeviation('ch2')]
+  var expected = [
+    new MultiExecutionDeviation('ch1'),
+    new MultiExecutionDeviation('ch2')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1052,16 +1166,16 @@ test('PARALLEL - Multi-executing more than one stages - parent should not be clo
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
-  ch3.update(undefined, 'CLOSE', undefined)
-  stage1.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new MultiExecutionDeviation('ch1'),
   new MultiExecutionDeviation('ch2')]
@@ -1105,7 +1219,7 @@ test('EXCLUSIVE - Executing and incorrect branch', async () => {
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1316,7 +1430,7 @@ test('EXCLUSIVE - Partially executing a correct branch and executing an incorrec
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1361,7 +1475,7 @@ test('EXCLUSIVE - Partially executing a correct branch and executing an incorrec
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncompleteDeviation('ch1'), new IncorrectBranchDeviation('ch2')]
@@ -1406,7 +1520,7 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncompleteDeviation('ch2'), new IncorrectBranchDeviation('ch2')]
@@ -1450,7 +1564,7 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1493,7 +1607,7 @@ test('EXCLUSIVE - Overlapped executions', async () => {
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch2')]
   var data = pers1.analyze()
@@ -1537,12 +1651,12 @@ test('INCLUSIVE - Executing one of the correct branches twice', async () => {
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
-  stage1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch1')]
   var data = pers1.analyze()
@@ -1584,7 +1698,7 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -1628,7 +1742,7 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
 
   var expected = []
@@ -1671,12 +1785,12 @@ test('INCLUSIVE - Executing unintended branch beside the correct ones', async ()
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch3.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
-  stage1.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
@@ -1719,12 +1833,12 @@ test('INCLUSIVE - Executing multiple unintended branches beside the correct one'
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch3.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
-  stage1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectBranchDeviation('ch2'), new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
@@ -1764,9 +1878,9 @@ test('ITERATION - Incorrect execution sequence - 1 stage', async () => {
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch2'])]
   var data = pers1.analyze()
@@ -1847,7 +1961,7 @@ test('ITERATION - Skipping A1', async () => {
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, undefined, 'SKIPPED')
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch2']), new SkipDeviation(['ch1'], 'NA')]
   var data = pers1.analyze()
@@ -1885,7 +1999,7 @@ test('ITERATION - Incomplete execution of one stage - parent should not be close
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
 
   var expected = []
@@ -1962,7 +2076,7 @@ test('ITERATION - Incomplete execution of one stage - parent should be closed', 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -2056,10 +2170,10 @@ test('SEQUENCE&PARALLEL - Missing parallel stage execution', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, undefined, 'SKIPPED')
   stage2.propagateCondition('SHOULD_BE_CLOSED')
-  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new SkipDeviation(['parallel'], 'ch4')]
@@ -2112,22 +2226,24 @@ test('SEQUENCE&PARALLEL - Incomplete parallel stage execution', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
   //stage2.propagateCondition('SHOULD_BE_CLOSED')
-  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('parallel'), new IncompleteDeviation('ch3')]
+  var expected = [ 
+    new IncompleteDeviation('parallel'), 
+    new IncompleteDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
 })
 
-//Consider adding test where both branches close and then the one reopens so parent reopens
+//Consider adding test where both branches CLOSED and then the one reopens so parent reopens
 test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async () => {
   //e, A, A, B, f
   //Children stages
@@ -2171,16 +2287,16 @@ test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async ()
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch2.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
-  ch3.update(undefined, 'CLOSE', undefined)
-  stage2.update(undefined, 'CLOSE', undefined)
-  ch4.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  stage2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new MultiExecutionDeviation('ch2')]
@@ -2232,14 +2348,14 @@ test('SEQUENCE&EXCLUSIVE - Executing an incorrect exclusive branch', async () =>
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch3.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
-  ch2.update(undefined, 'CLOSE', undefined)
-  stage2.update(undefined, 'CLOSE', undefined)
-  ch4.update(undefined, 'CLOSE', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  stage2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncorrectBranchDeviation('ch3')]
@@ -2291,13 +2407,13 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch3.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, undefined, 'SKIPPED')
   //propagate? if so, in what order?
-  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('exclusive'), new IncorrectBranchDeviation('ch3'), new SkipDeviation(['ch2'], 'NA')]
@@ -2350,13 +2466,13 @@ test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
-  ch1.update(undefined, 'CLOSE', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
-  ch3.update(undefined, 'CLOSE', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, undefined, 'SKIPPED')//not sure here
   //propagate? if so, in what order?
-  ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('inclusive'), new IncorrectBranchDeviation('ch3')]
@@ -2408,12 +2524,12 @@ test('SEQUENCE&INCLUSIVE - Incomplete branch execution', async () => {
 
  //Simulating the process flow
  stage1.update(undefined, 'OPEN', undefined)
- ch1.update(undefined, 'CLOSE', undefined)
+ ch1.update(undefined, 'CLOSED', undefined)
  stage2.update(undefined, 'OPEN', undefined)
  ch3.update(undefined, 'OPEN', undefined)
  ch2.update(undefined, undefined, 'SKIPPED')//not sure here
  //propagate? if so, in what order?
- ch4.update(undefined, 'CLOSE', 'OUTOFORDER')
+ ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('inclusive'), new IncompleteDeviation('ch3')]

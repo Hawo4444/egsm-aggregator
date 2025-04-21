@@ -283,11 +283,11 @@ class BpmnModel {
                 }
                 break;
             case 'INCORRECT_EXECUTION':
-                deviation.block_a.forEach(element => {
+                /*deviation.block_a.forEach(element => {
                     if (this.construcs.has(element)) {
                         this.construcs.get(element).addDeviation('INCORRECT_EXECUTION')
                     }
-                });
+                });*/
                 break;
             case 'INCORRECT_BRANCH':
                 if (this.construcs.has(deviation.block_a)) {

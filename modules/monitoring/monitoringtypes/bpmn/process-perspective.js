@@ -46,11 +46,12 @@ class OverlapDeviation extends Deviation {
  */
 class IncorrectExecutionSequenceDeviation extends Deviation {
     /**
-     * @param {String[]} blocks ID-s of the affected Blocks
+     * @param {String} skipped ID-s of the affected Block
+     * @param {String} origin ID-s of the stage before the originally skipped block got executed
      * @param {Number} index The parent stage's open-close pair index this deviation belongs to
      */
-    constructor(blocks, index) {
-        super('INCORRECT_EXECUTION', blocks, null, index)
+    constructor(skipped, origin, index) {
+        super('INCORRECT_EXECUTION', skipped, origin, index)
     }
 }
 
@@ -174,8 +175,8 @@ class ProcessPerspective {
         //If the Stage is UNOPENED, but not included in any SkipDeviation instance means that the stage
         //has not been executed, but it is intended (e.g.: Another branch has been executed and this was done correctly)
         //In this case there is no need to evaluate the children, since all of them will be in default state too
-        var current_stage = this.egsm_model.stages.get(stage)
-        if (current_stage.state == 'UNOPENED') {
+        var currentStage = this.egsm_model.stages.get(stage)
+        if (currentStage.state == 'UNOPENED') {
             return deviations
         }
 
@@ -201,11 +202,11 @@ class ProcessPerspective {
 
         //The children have to be evaluated
         //Evaluation procedure depends on the type of the parent Stage
-        for (const pair of current_stage.getOpenClosePairs()) {
+        for (const pair of currentStage.getOpenClosePairs()) {
             console.log('pair:' + pair)
         }
 
-        switch (current_stage.type) {
+        switch (currentStage.type) {
             case 'SEQUENCE':
                 //-SKIP deviation-
                 //If there is any SKIPPED stage among children it suggests, that at least one child activity has been skipped
@@ -229,7 +230,7 @@ class ProcessPerspective {
                 while (!finalized) {
                     finalized = true
                     unopened.forEach(unopenedElement => {
-                        for (var [key, entry] of skippings.entries()) {
+                        for (var [_, entry] of skippings.entries()) {
                             if (this.egsm_model.stages.get(entry[0]).direct_predecessor == unopenedElement) {
                                 entry.unshift(unopenedElement)
                                 finalized = false
@@ -240,14 +241,14 @@ class ProcessPerspective {
                 }
 
                 //If the Sequence stage is supposed to be closed, then every UNOPENED stage was skipped
-                if (current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     unopened.forEach(unopenedElement => {
                         skippings.set(null, [unopenedElement])
                         this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED')
                     });
                 }
 
-                if (current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     var lastElement = [...unopened].find(candidate => {
                         return ![...unopened].some(other =>
                             this.egsm_model.stages.get(other).direct_predecessor === candidate
@@ -262,9 +263,9 @@ class ProcessPerspective {
                             this.egsm_model.stages.get(current).propagateCondition('SHOULD_BE_CLOSED');
                             unopened.delete(current);
                 
-                            var predecessor_id = this.egsm_model.stages.get(current).direct_predecessor;
-                            if (unopened.has(predecessor_id)) {
-                                current = predecessor_id;
+                            var predecessorId = this.egsm_model.stages.get(current).direct_predecessor;
+                            if (unopened.has(predecessorId)) {
+                                current = predecessorId;
                             } else {
                                 current = null;
                             }
@@ -278,83 +279,134 @@ class ProcessPerspective {
                     deviations.push(new SkipDeviation(entry, key))
                 }
 
-                //-INCOMPLETE deviation-
-                //Unaccounted for OoO stages may suggest that a previous stage was incomplete or that there was an overlap
-                outOfOrder.forEach(outOfOrderElement => {
-                    if (!skippings.has(outOfOrderElement)) {
-                        var predecessor_id = this.egsm_model.stages.get(outOfOrderElement).direct_predecessor
-                        if (predecessor_id !== 'NONE' && predecessor !== 'NA') {
-                            var predecessor = this.egsm_model.stages.get(predecessor_id)
-                            var opening_time = this.egsm_model.stages.get(outOfOrderElement).getLatestOpening().timestamp
-                            var predecessor_opening = predecessor.getLatestOpening(opening_time)
-                            if (predecessor_opening.state === 'OPEN') {
-                                //We know there is an overlap, but we are not sure about incompleteness
-                                var predecessor_closing = predecessor.getClosingTimeAfter(opening_time)
-                                if (predecessor_closing == null) {
-                                    deviations.push(new IncompleteDeviation(predecessor_id))
-                                }
-                                var overlapped_sequence = [outOfOrderElement]
+                //-OVERLAP and INCOMPLETE deviations-
+                let processFlow = []
+                for (var key in children) {
+                    this.egsm_model.stages.get(children[key]).getHistory().forEach(change => {
+                        processFlow.push({
+                            timestamp: change.timestamp,
+                            id: children[key],
+                            status: change.status,
+                            state: change.state,
+                            compliance: change.compliance
+                        });
+                    });
+                }
+        
+                processFlow.sort((a, b) => {
+                    if (a.timestamp === null) return 1;
+                    if (b.timestamp === null) return -1;
+                    return a.timestamp - b.timestamp;
+                });
 
-                                //We add everything from the sequence and beyond that opens before the closing
-                                //Potentially, we could go up the tree and add everything that is in any parent sequence block
-                                //For now, we just add the overlap from the closest parent sequence block
-                                this._collectOverlaps(outOfOrderElement, predecessor_opening.timestamp, predecessor_closing, overlapped_sequence)
-
-                                deviations.push(new OverlapDeviation(overlapped_sequence, predecessor_id))
-                                //deviations.push(new IncompleteDeviation(outOfOrderElement))
-                                //this.egsm_model.stages.get(outOfOrderElement).propagateCondition('SHOULD_BE_CLOSED')
+                for (let i = 0; i < processFlow.length; i++) {
+                    let item = processFlow[i];
+                    if (item.state === "OPEN") {
+                        let overlapped = []
+                        let foundClosing = false
+                        for (let j = i + 1; j < processFlow.length; j++) {
+                            let nextItem = processFlow[j]
+                            let history = this.egsm_model.stages.get(nextItem.id).getHistory();
+                            if (nextItem.state === "OPEN" ||
+                                (nextItem.state === "CLOSED" && !history.some(e => e.state === 'OPEN'))) {
+                                overlapped.push(nextItem.id);
+                            } else if (nextItem.state === "CLOSED" && item.id === nextItem.id) {
+                                foundClosing = true
+                                break
                             }
+                        }
+                        if (overlapped.length > 0) {
+                            //If the overlap is caused by non-basic stage, we could propagate some condition to find the specific cause
+                            deviations.push(new OverlapDeviation(overlapped, item.id))
+                            this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED')
+                            if (!foundClosing) {
+                                deviations.push(new IncompleteDeviation(item.id))
+                            }
+                        }else if (!foundClosing) {
+                            /*var successorUnopened = true;
+                            var currentId = item.id;
+                            while (true) {
+                                let successor = [...this.egsm_model.stages.values()].find(stage => stage.predecessor === currentId);
+                                if (!successor) {
+                                    break;
+                                }
+                                if (successor.state !== 'UNOPENED') {
+                                    successorUnopened = false;
+                                    break;
+                                }
+                                currentId = successor.id;
+                            }*/
+                            if (/*!successorUnopened || */(item.parent && item.parent.propagated_conditions.has('SHOULD_BE_CLOSED'))) {
+                                deviations.push(new IncompleteDeviation(item.id))
+                                this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED')
+                            }
+                        }
+                    }
+                }
+
+                //-MULTIEXECUTION deviation-
+                this.egsm_model.stages.forEach((stage, key) => {
+                    if (stage.compliance === 'OUTOFORDER') {
+                        var count = 0;
+                        if (stage.state === 'CLOSED' && !stage.getHistory().some(e => e.state === 'OPEN')) {
+                            count = processFlow.filter(item => item.id === key && item.state === "CLOSED").length;
+                        } else {
+                            count = processFlow.filter(item => item.id === key && item.state === "OPEN").length;
+                        }
+                        if (count > 1) {
+                            deviations.push(new MultiExecutionDeviation(key, count))
                         }
                     }
                 });
 
-                //-OVERLAP deviation-
-                let process_flow = new Map()
-                for (var key in children) {
-                    this.egsm_model.stages.get(children[key]).getHistory().forEach(change => {
-                        process_flow.set(change.timestamp, {
-                            name: change.name,
-                            status: change.status,
-                            state: change.state,
-                            compliance: change.compliance
-                        })
-                    })
-                }
-        
-                let sortedMap = new Map(
-                    [...process_flow.entries()].sort((a, b) => {
-                        if (a[0] === null) return 1;
-                        if (b[0] === null) return -1;
-                        return a[0] < b[0] ? -1 : 1;
-                    })
-                );
-                
-                let overlaps = [];
-                let entries = Array.from(sortedMap.entries());
-
-                for (let i = 0; i < entries.length; i++) {
-                    let [timestamp, item] = entries[i];
-                    if (item.status === "OPEN") {
-                        var overlapped = []
-                        for (let j = i + 1; j < entries.length; j++) {
-                            if (j < entries.length && (entries[j][1].status === "OPEN" || 
-                                    (entries[j][1].status === "CLOSED" && !this.egsm_model.stages.get(entries[j][1].name).getHistory().some(e => e.state === 'OPEN')))) {
-                                overlapped.push(entries[j][1]);
+                //-INCORRECTEXECUTIONSEQUENCE deviation- 
+                this.egsm_model.stages.forEach((_, key) => {
+                    var skippedFound = false
+                    var openOutOfOrderFound = false
+                    var previousStage = null
+                    var firstFound = false
+                    for (let i = 0; i < processFlow.length; i++) {
+                        if (processFlow[i].id === key) {
+                            if (!firstFound) {
+                                firstFound = true
+                                continue;
+                            }
+                            if (!skippedFound) {
+                                if (processFlow[i].compliance !== 'SKIPPED') {
+                                    break
+                                } else {
+                                    skippedFound = true
+                                }
+                            } else {
+                                if (processFlow[i].compliance === 'OUTOFORDER') {
+                                    openOutOfOrderFound = true
+                                    for (let j = i - 1; j >= 0; j--) {
+                                        if (processFlow[j].state === 'OPEN' || 
+                                                (processFlow[j].state === 'CLOSED' && !this.egsm_model.stages.get(processFlow[j].id).history.some(e => e.state === 'OPEN'))) {
+                                            previousStage = processFlow[j].id
+                                            break
+                                        }
+                                    }
+                                    break
+                                }
                             }
                         }
-                        overlaps.push(new OverlapDeviation(overlapped, item.name))
                     }
-                }
-
-                overlaps.forEach(overlap => {
-                    deviations.push(overlap)   
+                    if (skippedFound) {
+                        if (openOutOfOrderFound) {
+                            deviations.push(new IncorrectExecutionSequenceDeviation(key, previousStage))
+                        } else {
+                            //here I should do the thing with adding previous stages
+                            deviations.push(new SkipDeviation(key))
+                        }
+                    }
                 });
 
                 //If the number of OoO stages is more than the number of skipped stages, then multi-execution of activity,
                 //incomplete activity execution, overlapped execution, or wrong sequence of execution occurred. 
                 //If there was no skip, then we can know that only one OoO means duplication and 
                 //more than one means incorrect sequence, but skippings makes it impossible to distinguish
-                if (outOfOrder.size > skipped.size) {
+                /*if (outOfOrder.size > skipped.size) {
                     var members = []
                     outOfOrder.forEach(outOfOrderElement => {
                         if (!skippings.has(outOfOrderElement)) {
@@ -362,21 +414,21 @@ class ProcessPerspective {
                         }
                     });
                     deviations.push(new IncorrectExecutionSequenceDeviation(members))
-                }
+                }*/
                 //Finally if any stage is open we can create an 'Incomplete Execution' deviation for each
                 //if the parent stage should be already closed and in addition we propagate the condition to the
                 //open children as well
-                if (open.size > 0 && current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                /*if (open.size > 0 && currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     open.forEach(openElement => {
                         deviations.push(new IncompleteDeviation(openElement))
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
                     });
-                }
+                }*/
                 break;
             case 'PARALLEL':
                 //If the parent stage is should be closed then it means that at least one of the children processes
                 // has not been executed completely or at all, so we can create IncompleteExecution and SkipDeviation instances 
-                if (current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     unopened.forEach(unopenedElement => {
                         deviations.push(new SkipDeviation([unopenedElement], 'NA'))
                         this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED')
@@ -395,7 +447,7 @@ class ProcessPerspective {
             case 'EXCLUSIVE':
                 //If the parent should be already closed, then the opened children suggesting IncompleteDeviations 
                 //even if they are not on the correct branch
-                if (current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     open.forEach(openElement => {
                         deviations.push(new IncompleteDeviation(openElement))
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
@@ -417,7 +469,7 @@ class ProcessPerspective {
             case 'INCLUSIVE':
                 //IF the parent stage is supposed to be closed than we can create an IncompleteExecution deviation instance
                 //for each opened activity
-                if (current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     open.forEach(openElement => {
                         deviations.push(new IncompleteDeviation(openElement))
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
@@ -432,7 +484,7 @@ class ProcessPerspective {
             case 'LOOP':
                 //In this case there is no deviation detection, but we need to propagate the conditions to the child, 
                 //which is always and ITERATION block
-                if (current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     open.forEach(openElement => {
                         deviations.push(new IncompleteDeviation(openElement))
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
@@ -452,7 +504,7 @@ class ProcessPerspective {
                 });
                 //Finally, if the parent stage already should be closed, then for each opened children we
                 //can create an IncompleteDeviation for each 'opened' child
-                if (current_stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     open.forEach(openElement => {
                         deviations.push(new IncompleteDeviation(openElement))
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
@@ -462,15 +514,6 @@ class ProcessPerspective {
         }
         console.log('stageDeviations:' + deviations)
         return deviations
-    }
-
-    _collectOverlaps(predecessor_id, predecessor_opening, predecessor_closing, overlapped_sequence) {
-        this.egsm_model.stages.forEach((child_stage, child_id) => {
-            if (child_stage.direct_predecessor === predecessor_id && child_stage.getOpeningTimeBetween(predecessor_opening, predecessor_closing) != null) {
-                overlapped_sequence.push(child_id)
-                this._collectOverlaps(child_id, predecessor_opening, predecessor_closing, overlapped_sequence)
-            }
-        });
     }
 }
 
