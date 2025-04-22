@@ -2416,7 +2416,10 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
   ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('exclusive'), new IncorrectBranchDeviation('ch3'), new SkipDeviation(['ch2'], 'NA')]
+  var expected = [
+    new IncompleteDeviation('exclusive'), 
+    new IncorrectBranchDeviation('ch3'), 
+    new SkipDeviation(['ch2'], 'NA')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2475,7 +2478,9 @@ test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
   ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('inclusive'), new IncorrectBranchDeviation('ch3')]
+  var expected = [
+    new IncompleteDeviation('inclusive'),
+    new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2532,7 +2537,9 @@ test('SEQUENCE&INCLUSIVE - Incomplete branch execution', async () => {
  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncorrectExecutionSequenceDeviation(['ch4']), new IncompleteDeviation('inclusive'), new IncompleteDeviation('ch3')]
+  var expected = [
+    new IncompleteDeviation('inclusive'), 
+    new IncompleteDeviation('ch3')]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)

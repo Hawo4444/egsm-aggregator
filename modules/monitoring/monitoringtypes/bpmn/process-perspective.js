@@ -208,77 +208,6 @@ class ProcessPerspective {
 
         switch (currentStage.type) {
             case 'SEQUENCE':
-                //-SKIP deviation-
-                //If there is any SKIPPED stage among children it suggests, that at least one child activity has been skipped
-                //furthermore, at least one OoO child stage must exist
-                var skippings = new Map() //OoO stage -> skipped sequence (skipped stages later extended by Unopened Stages before the Skipped one)
-                if (skipped.size > 0) {
-                    skipped.forEach(skippedElement => {
-                        outOfOrder.forEach(outOfOrderElement => {
-                            if (this.egsm_model.stages.get(outOfOrderElement).direct_predecessor == skippedElement) {
-                                skippings.set(outOfOrderElement, [skippedElement])
-                                //skipped.delete(skippedElement)
-                                unopened.delete(skippedElement)
-                                this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED')
-                            }
-                        });
-                    });
-                }
-
-                //Extending skipped sequences by trying to include UNOPENED stages
-                var finalized = false
-                while (!finalized) {
-                    finalized = true
-                    unopened.forEach(unopenedElement => {
-                        for (var [_, entry] of skippings.entries()) {
-                            if (this.egsm_model.stages.get(entry[0]).direct_predecessor == unopenedElement) {
-                                entry.unshift(unopenedElement)
-                                finalized = false
-                                unopened.delete(unopenedElement)
-                            }
-                        }
-                    });
-                }
-
-                //If the Sequence stage is supposed to be closed, then every UNOPENED stage was skipped
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    unopened.forEach(unopenedElement => {
-                        skippings.set(null, [unopenedElement])
-                        this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                }
-
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    var lastElement = [...unopened].find(candidate => {
-                        return ![...unopened].some(other =>
-                            this.egsm_model.stages.get(other).direct_predecessor === candidate
-                        );
-                    });
-                
-                    if (lastElement) {
-                        var sequence = [];
-                        var current = lastElement;
-                        while (current) {
-                            sequence.push(current);
-                            this.egsm_model.stages.get(current).propagateCondition('SHOULD_BE_CLOSED');
-                            unopened.delete(current);
-                
-                            var predecessorId = this.egsm_model.stages.get(current).direct_predecessor;
-                            if (unopened.has(predecessorId)) {
-                                current = predecessorId;
-                            } else {
-                                current = null;
-                            }
-                        }
-                        skippings.set(null, sequence);
-                    }
-                }
-                 
-                //Creating SkipDeviation instances
-                for (var [key, entry] of skippings) {
-                    deviations.push(new SkipDeviation(entry, key))
-                }
-
                 //-OVERLAP and INCOMPLETE deviations-
                 let processFlow = []
                 for (var key in children) {
@@ -323,20 +252,7 @@ class ProcessPerspective {
                                 deviations.push(new IncompleteDeviation(item.id))
                             }
                         }else if (!foundClosing) {
-                            /*var successorUnopened = true;
-                            var currentId = item.id;
-                            while (true) {
-                                let successor = [...this.egsm_model.stages.values()].find(stage => stage.predecessor === currentId);
-                                if (!successor) {
-                                    break;
-                                }
-                                if (successor.state !== 'UNOPENED') {
-                                    successorUnopened = false;
-                                    break;
-                                }
-                                currentId = successor.id;
-                            }*/
-                            if (/*!successorUnopened || */(item.parent && item.parent.propagated_conditions.has('SHOULD_BE_CLOSED'))) {
+                            if ((item.parent && item.parent.propagated_conditions.has('SHOULD_BE_CLOSED'))) {
                                 deviations.push(new IncompleteDeviation(item.id))
                                 this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED')
                             }
@@ -359,7 +275,8 @@ class ProcessPerspective {
                     }
                 });
 
-                //-INCORRECTEXECUTIONSEQUENCE deviation- 
+                //-INCORRECTEXECUTIONSEQUENCE and SKIP deviation-
+                var skippings = new Map() //OoO stage -> skipped sequence (skipped stages later extended by Unopened Stages before the Skipped one)
                 this.egsm_model.stages.forEach((_, key) => {
                     var skippedFound = false
                     var openOutOfOrderFound = false
@@ -395,12 +312,74 @@ class ProcessPerspective {
                     if (skippedFound) {
                         if (openOutOfOrderFound) {
                             deviations.push(new IncorrectExecutionSequenceDeviation(key, previousStage))
-                        } else {
-                            //here I should do the thing with adding previous stages
-                            deviations.push(new SkipDeviation(key))
+                        } else {      
+                            //If there is any SKIPPED stage among children it suggests, that at least one child activity has been skipped
+                            //furthermore, at least one OoO child stage must exist                     
+                            outOfOrder.forEach(outOfOrderElement => {
+                                if (this.egsm_model.stages.get(outOfOrderElement).direct_predecessor == key) {
+                                    skippings.set(outOfOrderElement, [key])
+                                    //skipped.delete(skippedElement)
+                                    unopened.delete(key)
+                                    this.egsm_model.stages.get(key).propagateCondition('SHOULD_BE_CLOSED')
+                                }
+                            });
+                            //Extending skipped sequences by trying to include UNOPENED stages
+                            var finalized = false
+                            while (!finalized) {
+                                finalized = true
+                                unopened.forEach(unopenedElement => {
+                                    for (var [_, entry] of skippings.entries()) {
+                                        if (this.egsm_model.stages.get(entry[0]).direct_predecessor == unopenedElement) {
+                                            entry.unshift(unopenedElement)
+                                            finalized = false
+                                            unopened.delete(unopenedElement)
+                                        }
+                                    }
+                                });
+                            }
                         }
                     }
-                });
+                });      
+                
+
+                //If the Sequence stage is supposed to be closed, then every UNOPENED stage was skipped
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                    unopened.forEach(unopenedElement => {
+                        skippings.set(null, [unopenedElement])
+                        this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED')
+                    });
+                }
+
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                    var lastElement = [...unopened].find(candidate => {
+                        return ![...unopened].some(other =>
+                            this.egsm_model.stages.get(other).direct_predecessor === candidate
+                        );
+                    });
+                
+                    if (lastElement) {
+                        var sequence = [];
+                        var current = lastElement;
+                        while (current) {
+                            sequence.push(current);
+                            this.egsm_model.stages.get(current).propagateCondition('SHOULD_BE_CLOSED');
+                            unopened.delete(current);
+                
+                            var predecessorId = this.egsm_model.stages.get(current).direct_predecessor;
+                            if (unopened.has(predecessorId)) {
+                                current = predecessorId;
+                            } else {
+                                current = null;
+                            }
+                        }
+                        skippings.set(null, sequence);
+                    }
+                }
+                 
+                //Creating SkipDeviation instances
+                for (var [key, entry] of skippings) {
+                    deviations.push(new SkipDeviation(entry, key))
+                }
 
                 //If the number of OoO stages is more than the number of skipped stages, then multi-execution of activity,
                 //incomplete activity execution, overlapped execution, or wrong sequence of execution occurred. 
@@ -427,7 +406,7 @@ class ProcessPerspective {
                 break;
             case 'PARALLEL':
                 //If the parent stage is should be closed then it means that at least one of the children processes
-                // has not been executed completely or at all, so we can create IncompleteExecution and SkipDeviation instances 
+                //has not been executed completely or at all, so we can create IncompleteExecution and SkipDeviation instances 
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     unopened.forEach(unopenedElement => {
                         deviations.push(new SkipDeviation([unopenedElement], 'NA'))
@@ -438,13 +417,32 @@ class ProcessPerspective {
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
                     });
                 }
-                //Finally we need to check if there is ano OoO stage, which means multi-execution
-                //We need to check it even if the parent does not have SHOULD_BE_CLOSED propagated condition yet
-                outOfOrder.forEach(outOfOrderElement => {
-                    deviations.push(new MultiExecutionDeviation(outOfOrderElement))
+                children.forEach(childId => {
+                    var child = this.egsm_model.stages.get(childId)
+                    var count = 0
+                    if (child.compliance === 'OUTOFORDER') {
+                        if (child.getHistory().some(e => e.state === 'OPEN')) { //Activity
+                            child.getHistory().forEach(e => {
+                                if (e.state === 'OPEN') {
+                                    count++
+                                }
+                            });
+                        } else { //Event
+                            child.getHistory().forEach(e => {
+                                if (e.state === 'CLOSED') {
+                                    count++
+                                }
+                            });
+                        }
+                        if (count > 1) {
+                            deviations.push(new MultiExecutionDeviation(outOfOrderElement, count))
+                        }
+                    }
                 });
+                //If we decide to propagate overlap, we can work with it here
                 break;
             case 'EXCLUSIVE':
+                //-INCOMPLETE deviation-
                 //If the parent should be already closed, then the opened children suggesting IncompleteDeviations 
                 //even if they are not on the correct branch
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
@@ -453,21 +451,43 @@ class ProcessPerspective {
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
                     });
                 }
+                //-MULTIEXECUTION and INCORRECTBRANCH deviations-
                 //Except a very special condition (see thesis), the children's compliance can be OoO only if they
                 //are non-intended branches and they have been (at least partially) executed, thus we can create
-                // an IncorrectBranchExecution for each of them (including the special condition as well)
+                //an IncorrectBranchExecution for each of them (including the special condition as well)
                 outOfOrder.forEach(outOfOrderElement => {
-                    deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
+                    var history = this.egsm_model.stages.get(outOfOrderElement).getHistory()
+                    var count = 0
+                    if (history.some(e => e.state === 'OPEN')) { //Activity
+                        history.forEach(e => {
+                            if (e.state === 'OPEN') {
+                                count++
+                            }
+                        });
+                    } else { //Event
+                        history.forEach(e => {
+                            if (e.state === 'CLOSED') {
+                                count++
+                            }
+                        });
+                    }
+                    if (count > 1) {
+                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count))
+                    } else {
+                        deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
+                    }  
                 });
 
                 //Finally for each skipped branches a SkipDeviation instance is created
+                //Are the branches actually marked as skipped?
                 skipped.forEach(skippedElement => {
                     deviations.push(new SkipDeviation([skippedElement], 'NA'))
                     this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED')
                 });
                 break;
             case 'INCLUSIVE':
-                //IF the parent stage is supposed to be closed than we can create an IncompleteExecution deviation instance
+                //-INCOMPLETE deviation-
+                //If the parent stage is supposed to be closed than we can create an IncompleteExecution deviation instance
                 //for each opened activity
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     open.forEach(openElement => {
@@ -475,15 +495,39 @@ class ProcessPerspective {
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
                     });
                 }
-                //For each OutOfOrder stage we can create an IncorrectBranchDeviation instance, since they suggest that 
-                //one or more non-intended branch has been executed, correct branch has been executed more than once
+
+                //-MULTIEXECUTION and INCORRECTBRANCH deviations-
                 outOfOrder.forEach(outOfOrderElement => {
-                    deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
+                    var history = this.egsm_model.stages.get(outOfOrderElement).getHistory()
+                    var count = 0
+                    if (history.some(e => e.state === 'OPEN')) { //Activity
+                        history.forEach(e => {
+                            if (e.state === 'OPEN') {
+                                count++
+                            }
+                        });
+                    } else { //Event
+                        history.forEach(e => {
+                            if (e.state === 'CLOSED') {
+                                count++
+                            }
+                        });
+                    }
+                    if (count > 1) {
+                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count))
+                    } else {
+                        deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
+                    }  
                 });
+
+                //-SKIP deviation-
+                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                    // without the condition, we are not able to tell which one should have opened
+                }
                 break;
             case 'LOOP':
                 //In this case there is no deviation detection, but we need to propagate the conditions to the child, 
-                //which is always and ITERATION block
+                //which is always an ITERATION block
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     open.forEach(openElement => {
                         deviations.push(new IncompleteDeviation(openElement))

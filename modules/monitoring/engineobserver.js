@@ -142,7 +142,6 @@ function removeProcess(instance_id, onchange) {
     }
 }
 
-
 //Setting up MQTT environment
 MQTT.init(onMessageReceived)
 
