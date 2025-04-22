@@ -26,6 +26,7 @@ class EgsmStage {
         this.children = []
         this.propagated_conditions = new Set() //SHOULD_BE_CLOSED
         this.history = []
+        this.latest_change = null
         this.recordHistory()
     }
 
@@ -34,8 +35,10 @@ class EgsmStage {
      */
     recordHistory() {
         const now = new Date()
+        const timestamp = performance.now()
+        this.latest_change = timestamp
         const change = {
-            timestamp: performance.now(), //for sorting/comparison purposes
+            timestamp: timestamp, //for sorting/comparison purposes
             timestampStr: now.toISOString(), //human-readable format
             status: this.status,
             state: this.state,

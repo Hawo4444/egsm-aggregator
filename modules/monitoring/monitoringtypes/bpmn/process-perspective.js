@@ -162,7 +162,39 @@ class ProcessPerspective {
     _analyzeStage(stage, discoveredDeviations) {
         console.log('analyze stage:' + stage)
         var deviations = discoveredDeviations
+        var currentStage = this.egsm_model.stages.get(stage)
 
+        //find parent iteration
+        var parentIteration = this._findParentIteration(currentStage)
+        var history = currentStage.getHistory()
+
+        if (parentIteration && parentIteration.getOpenClosePairs() > 0) {
+            for (var iterationPair of parentIteration.getOpenClosePairs()) {
+                if (history > 1) {
+                    for (var parentPair of currentStage.getOpenClosePairs()) { //this will not work with event, but can we have an event here?
+                        this._findDeviations(deviations, stage, currentStage, iterationPair, parentPair)
+                    }
+                } else {
+                    this._findDeviations(deviations, stage, currentStage, iterationPair, null)
+                }
+            }
+        } else {
+            if (history > 0) {
+                for (var parentPair of currentStage.getOpenClosePairs()) {
+                    this._findDeviations(deviations, stage, currentStage, null, parentPair)
+                }
+            } else {
+                this._findDeviations(deviations, stage, currentStage, null, null)
+            }
+        }
+    
+        console.log('stageDeviations:' + deviations)
+        return deviations
+    }
+
+    _findDeviations(deviations, stage, currentStage, iterationPair, parentPair) {
+        var iterationIndex = iterationPair ? iterationPair.index : -1
+        var parentIndex = parentPair ? parentPair.index : 0
         //If the Stage is unopened and has been added to a SkipDeviation as 'skipped activity' then it means
         //that no substage has been opened neither, so the evaluation of children is not necessary
         for (var key in deviations) {
@@ -175,7 +207,6 @@ class ProcessPerspective {
         //If the Stage is UNOPENED, but not included in any SkipDeviation instance means that the stage
         //has not been executed, but it is intended (e.g.: Another branch has been executed and this was done correctly)
         //In this case there is no need to evaluate the children, since all of them will be in default state too
-        var currentStage = this.egsm_model.stages.get(stage)
         if (currentStage.state == 'UNOPENED') {
             return deviations
         }
@@ -380,29 +411,6 @@ class ProcessPerspective {
                 for (var [key, entry] of skippings) {
                     deviations.push(new SkipDeviation(entry, key))
                 }
-
-                //If the number of OoO stages is more than the number of skipped stages, then multi-execution of activity,
-                //incomplete activity execution, overlapped execution, or wrong sequence of execution occurred. 
-                //If there was no skip, then we can know that only one OoO means duplication and 
-                //more than one means incorrect sequence, but skippings makes it impossible to distinguish
-                /*if (outOfOrder.size > skipped.size) {
-                    var members = []
-                    outOfOrder.forEach(outOfOrderElement => {
-                        if (!skippings.has(outOfOrderElement)) {
-                            members.push(outOfOrderElement)
-                        }
-                    });
-                    deviations.push(new IncorrectExecutionSequenceDeviation(members))
-                }*/
-                //Finally if any stage is open we can create an 'Incomplete Execution' deviation for each
-                //if the parent stage should be already closed and in addition we propagate the condition to the
-                //open children as well
-                /*if (open.size > 0 && currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    open.forEach(openElement => {
-                        deviations.push(new IncompleteDeviation(openElement))
-                        this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                }*/
                 break;
             case 'PARALLEL':
                 //If the parent stage is should be closed then it means that at least one of the children processes
@@ -435,7 +443,7 @@ class ProcessPerspective {
                             });
                         }
                         if (count > 1) {
-                            deviations.push(new MultiExecutionDeviation(outOfOrderElement, count))
+                            deviations.push(new MultiExecutionDeviation(childId, count))
                         }
                     }
                 });
@@ -556,8 +564,17 @@ class ProcessPerspective {
                 }
                 break;
         }
-        console.log('stageDeviations:' + deviations)
-        return deviations
+    }
+
+    _findParentIteration(stage) {
+        let currentStage = stage;
+        while (currentStage.parent && currentStage.parent !== 'NONE' && currentStage.parent !== 'NA') {
+            currentStage = this.egsm_model.stages.get(currentStage.parent);
+            if (currentStage.type === 'ITERATION') {
+                return currentStage;
+            }
+        }
+        return null;
     }
 }
 

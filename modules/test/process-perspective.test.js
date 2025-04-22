@@ -1023,7 +1023,7 @@ test('PARALLEL - Multi-executing a stage - parent should be closed', async () =>
   stage1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new MultiExecutionDeviation('ch1')]
+  var expected = [new MultiExecutionDeviation('ch1', 2)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1072,7 +1072,7 @@ test('PARALLEL - Multi-executing a stage - parent should not be closed yet', asy
   ch3.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new MultiExecutionDeviation('ch1')]
+  var expected = [new MultiExecutionDeviation('ch1', 2)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1125,8 +1125,8 @@ test('PARALLEL - Multi-executing more than one stages - parent should be closed'
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new MultiExecutionDeviation('ch1'),
-    new MultiExecutionDeviation('ch2')]
+    new MultiExecutionDeviation('ch1', 2),
+    new MultiExecutionDeviation('ch2', 2)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1177,8 +1177,9 @@ test('PARALLEL - Multi-executing more than one stages - parent should not be clo
   ch3.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new MultiExecutionDeviation('ch1'),
-  new MultiExecutionDeviation('ch2')]
+  var expected = [
+    new MultiExecutionDeviation('ch1', 2),
+    new MultiExecutionDeviation('ch2', 2)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1658,7 +1659,7 @@ test('INCLUSIVE - Executing one of the correct branches twice', async () => {
   ch2.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectBranchDeviation('ch1')]
+  var expected = [new MultiExecutionDeviation('ch1', 2)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
