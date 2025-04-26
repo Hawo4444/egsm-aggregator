@@ -19,16 +19,15 @@ class EgsmStage {
         else {
             this.type = type
         }
-        this.direct_predecessor = this.getSequentialPredecessor(processFlowGuard) //If the parent activity has SEQUENCE type it will contain the id of sucessor activity in case of correct execution (NONE if no predecessor). If the parent is not SEQUENCE then it will contain NA. Also NA for exception blocks
+        this.direct_predecessor = this.getSequentialPredecessor(processFlowGuard) //If the parent activity has SEQUENCE type it will contain the id of predecessor activity in case of correct execution (NONE if no predecessor). If the parent is not SEQUENCE then it will contain NA. Also NA for exception blocks
         this.status = "REGULAR" //REGULAR-FAULTY 
         this.state = "UNOPENED" //UNOPENED-OPEN-CLOSED
         this.compliance = "ONTIME" //ONTIME-SKIPPED-OUTOFORDER
         this.children = []
         this.propagated_conditions = new Set() //SHOULD_BE_CLOSED
         this.history = []
-        this.latest_change = null
+        this.condition_history = []
         this.recordHistory()
-        this.condition = false
     }
 
     /**
@@ -37,9 +36,9 @@ class EgsmStage {
     recordHistory() {
         const now = new Date()
         const timestamp = performance.now()
-        this.latest_change = timestamp
         const change = {
             timestamp: timestamp, //for sorting/comparison purposes
+            //TODO: this should be from the engine, but need to figure out what to use when parsing the XML (also when resetting)
             timestampStr: now.toISOString(), //human-readable format
             status: this.status,
             state: this.state,
@@ -65,24 +64,6 @@ class EgsmStage {
             }
         }
         return null
-    }
-
-    getLatestOpening() {
-        for (let i = this.history.length - 1; i >= 0; i--) {
-            const entry = this.history[i];
-            //Activity
-            if (entry.state === 'OPEN') {
-                return entry;
-            }
-            //Event - no opening
-            if (entry.state === 'CLOSED') {
-                const hasOpenAfter = this.history.slice(i + 1).some(e => e.state === 'OPEN');
-                if (!hasOpenAfter) {
-                    return entry;
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -126,26 +107,6 @@ class EgsmStage {
         return null
     }
 
-    getOpeningTimeBetween(from, to) {
-        for (let i = 0; i < this.history.length; i++) {
-            const entry = this.history[i];
-            const withinRange = entry.timestamp > from && (to == null || entry.timestamp < to);
-            if (!withinRange) continue
-            //Activity
-            if (entry.state === 'OPEN') {
-                return entry
-            }
-            //Event - no opening
-            if (entry.state === 'CLOSED') {
-                const hadOpenBefore = this.history.slice(0, i).some(e => e.state === 'OPEN');
-                if (!hadOpenBefore) {
-                    return entry
-                }
-            }
-        }
-        return null
-    }
-
     /**
     * Returns an array of {open, close} pairs from the stage's history
     * @returns {Array<{index: Number, open: Number, close: Number}>}
@@ -175,6 +136,36 @@ class EgsmStage {
             })
         }
         return pairs
+    }
+
+    recordCondition(value) {
+        if (this.parent !== 'INCLUSIVE' && this.parent !== 'EXCLUSIVE' && this.parent !== 'ITERATION') {
+            return
+        }
+        const timestamp = performance.now()
+        this.condition_history.push({
+            timestamp: timestamp,
+            value: value
+        })
+    }
+
+    getConditionAt(timestamp) {
+        let latest = null
+        for (const entry of this.condition_history) {
+            if (entry.timestamp <= timestamp) {
+                latest = entry
+            } else {
+                break
+            }
+        }
+        return latest ? latest.value : null
+    }
+
+    getLatestCondition() {
+        if (this.condition_history.length > 0) {
+            return this.condition_history[this.condition_history.length - 1].value
+        }
+        return null
     }
 
     /**

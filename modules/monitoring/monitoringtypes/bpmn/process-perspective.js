@@ -266,9 +266,7 @@ class ProcessPerspective {
                         let foundClosing = false
                         for (let j = i + 1; j < processFlow.length; j++) {
                             let nextItem = processFlow[j]
-                            let history = this.egsm_model.stages.get(nextItem.id).getHistory();
-                            if (nextItem.state === "OPEN" ||
-                                (nextItem.state === "CLOSED" && !history.some(e => e.state === 'OPEN'))) {
+                            if (nextItem.state === "OPEN") {
                                 overlapped.push(nextItem.id);
                             } else if (nextItem.state === "CLOSED" && item.id === nextItem.id) {
                                 foundClosing = true
@@ -294,12 +292,7 @@ class ProcessPerspective {
                 //-MULTIEXECUTION deviation-
                 this.egsm_model.stages.forEach((stage, key) => {
                     if (stage.compliance === 'OUTOFORDER') {
-                        var count = 0;
-                        if (stage.state === 'CLOSED' && !stage.getHistory().some(e => e.state === 'OPEN')) {
-                            count = processFlow.filter(item => item.id === key && item.state === "CLOSED").length;
-                        } else {
-                            count = processFlow.filter(item => item.id === key && item.state === "OPEN").length;
-                        }
+                        var count = processFlow.filter(item => item.id === key && item.state === "OPEN").length;
                         if (count > 1) {
                             deviations.push(new MultiExecutionDeviation(key, count))
                         }
@@ -329,8 +322,7 @@ class ProcessPerspective {
                                 if (processFlow[i].compliance === 'OUTOFORDER') {
                                     openOutOfOrderFound = true
                                     for (let j = i - 1; j >= 0; j--) {
-                                        if (processFlow[j].state === 'OPEN' || 
-                                                (processFlow[j].state === 'CLOSED' && !this.egsm_model.stages.get(processFlow[j].id).history.some(e => e.state === 'OPEN'))) {
+                                        if (processFlow[j].state === 'OPEN') {
                                             previousStage = processFlow[j].id
                                             break
                                         }
@@ -371,7 +363,6 @@ class ProcessPerspective {
                         }
                     }
                 });      
-                
 
                 //If the Sequence stage is supposed to be closed, then every UNOPENED stage was skipped
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
@@ -429,19 +420,11 @@ class ProcessPerspective {
                     var child = this.egsm_model.stages.get(childId)
                     var count = 0
                     if (child.compliance === 'OUTOFORDER') {
-                        if (child.getHistory().some(e => e.state === 'OPEN')) { //Activity
-                            child.getHistory().forEach(e => {
-                                if (e.state === 'OPEN') {
-                                    count++
-                                }
-                            });
-                        } else { //Event
-                            child.getHistory().forEach(e => {
-                                if (e.state === 'CLOSED') {
-                                    count++
-                                }
-                            });
-                        }
+                        child.getHistory().forEach(e => {
+                            if (e.state === 'OPEN') {
+                                count++
+                            }
+                        });
                         if (count > 1) {
                             deviations.push(new MultiExecutionDeviation(childId, count))
                         }
@@ -459,35 +442,37 @@ class ProcessPerspective {
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
                     });
                 }
-                //-MULTIEXECUTION and INCORRECTBRANCH deviations-
-                //Except a very special condition (see thesis), the children's compliance can be OoO only if they
-                //are non-intended branches and they have been (at least partially) executed, thus we can create
-                //an IncorrectBranchExecution for each of them (including the special condition as well)
+                //-MULTIEXECUTION and INCORRECTBRANCH deviations-               
                 outOfOrder.forEach(outOfOrderElement => {
-                    var history = this.egsm_model.stages.get(outOfOrderElement).getHistory()
+                    var stage = this.egsm_model.stages.get(outOfOrderElement)
                     var count = 0
-                    if (history.some(e => e.state === 'OPEN')) { //Activity
-                        history.forEach(e => {
-                            if (e.state === 'OPEN') {
-                                count++
+                    var firstOpening = null
+                    stage.getHistory().forEach(e => {
+                        if (e.state === 'OPEN') {
+                            count++
+                            if (!firstOpening) {
+                                firstOpening = e
                             }
-                        });
-                    } else { //Event
-                        history.forEach(e => {
-                            if (e.state === 'CLOSED') {
-                                count++
-                            }
-                        });
-                    }
+                        }
+                    });                   
                     if (count > 1) {
                         deviations.push(new MultiExecutionDeviation(outOfOrderElement, count))
+                        if (firstOpening?.status === 'OUTOFORDER') {
+                            var condition = stage.getConditionAt(firstOpening.timestamp);
+                            if (condition?.value === false) {
+                                deviations.push(new IncorrectBranchDeviation(outOfOrderElement));
+                            }
+                        }
                     } else {
-                        deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
-                    }  
+                        var condition = stage.getConditionAt(stage.getLatestOpening().timestamp)
+                        if (condition?.value === false) {
+                            deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
+                        }
+                    }
                 });
 
                 //Finally for each skipped branches a SkipDeviation instance is created
-                //Are the branches actually marked as skipped?
+                //Are the branches actually marked as skipped?????????????????????????????????????????????????????????????????????????????????????????
                 skipped.forEach(skippedElement => {
                     deviations.push(new SkipDeviation([skippedElement], 'NA'))
                     this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED')
@@ -508,29 +493,38 @@ class ProcessPerspective {
                 outOfOrder.forEach(outOfOrderElement => {
                     var history = this.egsm_model.stages.get(outOfOrderElement).getHistory()
                     var count = 0
-                    if (history.some(e => e.state === 'OPEN')) { //Activity
-                        history.forEach(e => {
-                            if (e.state === 'OPEN') {
-                                count++
+                    var firstOpening = null
+                    history.forEach(e => {
+                        if (e.state === 'OPEN') {
+                            count++
+                            if (!firstOpening) {
+                                firstOpening = e
                             }
-                        });
-                    } else { //Event
-                        history.forEach(e => {
-                            if (e.state === 'CLOSED') {
-                                count++
-                            }
-                        });
-                    }
+                        }
+                    });
                     if (count > 1) {
                         deviations.push(new MultiExecutionDeviation(outOfOrderElement, count))
+                        if (firstOpening?.status === 'OUTOFORDER') {
+                            deviations.push(new IncorrectBranchDeviation(outOfOrderElement));
+                        }
                     } else {
                         deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
-                    }  
+                    }
                 });
 
                 //-SKIP deviation-
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    // without the condition, we are not able to tell which one should have opened
+                    children.forEach(childId => {
+                        var child = this.egsm_model.stages.get(childId)
+                        if (child.state == 'UNOPENED') {
+                            //what time to choose? for now latest one
+                            var condition = child.getLatestCondition()
+                            if (condition?.value === true) {
+                                deviations.push(new SkipDeviation([childId], null))
+                                this.egsm_model.stages.get(childId).propagateCondition('SHOULD_BE_CLOSED')
+                            }
+                        }
+                    });
                 }
                 break;
             case 'LOOP':
@@ -544,6 +538,15 @@ class ProcessPerspective {
                 }
                 break;
             case 'ITERATION':
+                //Incomplete iteration - open iteration and has should be closed
+                //Skipped iteration - unopened iteration and parent loop has skipped OR closed iteration parent loop has should be closed
+                //Incomplete branch - one of the branches is opened and the parent loop should be closed - onyl when we have incomplete iteration
+                //Incorrect branch - only when we have a1 skipped and then a2, altough a1 may still open in which case incorrect order as well
+                //Skipped branch - a1 will be skipped at the end of the iteration, but also in case of skipped iteration, a1 or both may be skipped depending of the condition
+                //Overlap - do the same as in sequence
+                //Multi execution - within the iteration, count openings
+                //Incorrect order - same as in sequence, except now it needs to be a1 that is skipped first and then out of order, a2 will then also be outoforder without a chance of ever being ontime
+             
                 //For each OutOfOrder stage we can create an IncorrectExecutionSequence instance
                 outOfOrder.forEach(outOfOrderElement => {
                     deviations.push(new IncorrectExecutionSequenceDeviation([outOfOrderElement]))

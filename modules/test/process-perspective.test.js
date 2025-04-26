@@ -55,11 +55,13 @@ test('SEQUENCE - No deviation', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
@@ -105,10 +107,12 @@ test('SEQUENCE - One stage skipped', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, undefined, 'SKIPPED')
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [new SkipDeviation(['ch2'], 'ch3')]
@@ -153,9 +157,11 @@ test('SEQUENCE - Multiple stages skipped', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, undefined, 'SKIPPED')
-  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [new SkipDeviation(['ch2', 'ch3'], 'ch4')]
   var data = pers1.analyze()
@@ -205,6 +211,7 @@ test('SEQUENCE - Start event skipped', async () => {
   ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [new SkipDeviation(['ch1'], 'ch2')]
@@ -250,6 +257,7 @@ test('SEQUENCE - Last event not executed and parent should be closed', async () 
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
@@ -300,6 +308,7 @@ test('SEQUENCE - Only first event executed and parent should be closed', async (
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -347,7 +356,8 @@ test('SEQUENCE - Multiple stages including start event skipped', async () => {
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, undefined, 'SKIPPED')
-  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [new SkipDeviation(['ch1', 'ch2', 'ch3'], 'ch4')]
   var data = pers1.analyze()
@@ -392,6 +402,7 @@ test('SEQUENCE - Multi-execution of a stage', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
@@ -399,6 +410,7 @@ test('SEQUENCE - Multi-execution of a stage', async () => {
   ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
@@ -446,6 +458,7 @@ test('SEQUENCE - Multi-execution of a stage more than twice', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
@@ -457,6 +470,7 @@ test('SEQUENCE - Multi-execution of a stage more than twice', async () => {
   ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
@@ -504,13 +518,17 @@ test('SEQUENCE - Multi-execution of an event more than twice', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
-  ch1.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch1.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
@@ -558,12 +576,14 @@ test('SEQUENCE - Incorrect execution sequence including 2 stages', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined) 
   ch1.update(undefined, 'CLOSED', undefined) 
   ch2.update(undefined, undefined, 'SKIPPED')
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
@@ -610,10 +630,12 @@ test('SEQUENCE - Stage opened but not finished - parent should be closed', async
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -662,10 +684,12 @@ test('SEQUENCE - Stage opened but not finished - parent should not be closed', a
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [
@@ -713,12 +737,14 @@ test('SEQUENCE - Overlapped activities', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, undefined, 'SKIPPED')
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
@@ -2171,10 +2197,12 @@ test('SEQUENCE&PARALLEL - Missing parallel stage execution', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, undefined, 'SKIPPED')
   stage2.propagateCondition('SHOULD_BE_CLOSED')
-  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [new SkipDeviation(['parallel'], 'ch4')]
@@ -2227,13 +2255,15 @@ test('SEQUENCE&PARALLEL - Incomplete parallel stage execution', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
   ch3.update(undefined, 'OPEN', undefined)
   //stage2.propagateCondition('SHOULD_BE_CLOSED')
-  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [ 
@@ -2288,6 +2318,7 @@ test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async ()
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', undefined)
@@ -2297,6 +2328,7 @@ test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async ()
   ch3.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -2349,6 +2381,7 @@ test('SEQUENCE&EXCLUSIVE - Executing an incorrect exclusive branch', async () =>
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
@@ -2356,6 +2389,7 @@ test('SEQUENCE&EXCLUSIVE - Executing an incorrect exclusive branch', async () =>
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -2408,13 +2442,15 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, undefined, 'SKIPPED')
   //propagate? if so, in what order?
-  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
@@ -2470,13 +2506,15 @@ test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, undefined, 'SKIPPED')//not sure here
   //propagate? if so, in what order?
-  ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
@@ -2530,12 +2568,14 @@ test('SEQUENCE&INCLUSIVE - Incomplete branch execution', async () => {
 
  //Simulating the process flow
  stage1.update(undefined, 'OPEN', undefined)
+ ch1.update(undefined, 'OPEN', undefined)
  ch1.update(undefined, 'CLOSED', undefined)
  stage2.update(undefined, 'OPEN', undefined)
  ch3.update(undefined, 'OPEN', undefined)
  ch2.update(undefined, undefined, 'SKIPPED')//not sure here
  //propagate? if so, in what order?
- ch4.update(undefined, 'CLOSED', 'OUTOFORDER')
+ ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+ ch4.update(undefined, 'CLOSED', undefined)
  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
