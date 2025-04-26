@@ -53,10 +53,10 @@ class MockNotificationManager {
 
 test('onProcessEvent() - detect process deviation', async () => {
     var notifman = new MockNotificationManager()
-    var instance = new ProcessDeviationDetection('obs-1', [broker], 'owner', ['Process-type-1/instnace-1'], [], ['NOTIFY_ALL'], notifman)
+    var instance = new ProcessDeviationDetection('obs-1', [broker], 'owner', ['Process-type-1/instance-1'], [], ['NOTIFY_ALL'], notifman)
     var messageObj = {
         processtype: 'Process-type-1',
-        instanceid: 'instnace-1',
+        instanceid: 'instance-1',
         perspective: 'truck',
         stage: {
             name: 'Stage_A',
@@ -76,8 +76,8 @@ test('onProcessEvent() - detect process deviation', async () => {
         value: 'OutOfOrder',
 
     }]
-    var message = `Process deviation detected at [Process-type-1/instnace-1]__truck]!`
-    var expected = new ProcessNotification('obs-1',undefined, message, 'Process-type-1', 'instnace-1', 'truck', ['Process-type-1/instnace-1'], errorsExpected)
+    var message = `Process deviation detected at [Process-type-1/instance-1]__truck]!`
+    var expected = new ProcessNotification('obs-1',undefined, message, 'Process-type-1', 'instance-1', 'truck', ['Process-type-1/instance-1'], errorsExpected)
     expected.id = ''
     expected.timestamp = 0
     expect(data).toEqual(expected)

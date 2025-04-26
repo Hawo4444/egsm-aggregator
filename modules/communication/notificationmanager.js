@@ -36,7 +36,7 @@ class NotificationManager {
                             break;
                         case 'PROCESS_OWNERS':
                             //TODO: Here it should notify the owners of Process Instances using the Artifact included in the notification
-                            //It is not-resolved to have an 'attached_processes' attribute for each Artifact Instnaces in the database, since
+                            //It is not-resolved to have an 'attached_processes' attribute for each Artifact Instances in the database, since
                             //the same attribute should be maintained by multiple Workers and it could lead to uncertainties
                             //Another (and probably more feasible) approach is to perform Process Discovery trhough MQTT (similarly to 'discoverProcessGroupMembers')
                             break;
@@ -47,7 +47,7 @@ class NotificationManager {
                 notificationrules.forEach(rule => {
                     switch (rule) {
                         case 'ARTIFACT_OWNERS':
-                            //TODO: Here it should notify the owners of each Artifact which is attached to the Process instnace
+                            //TODO: Here it should notify the owners of each Artifact which is attached to the Process instance
                             //The list of currently attached Artifacts to a certain Process Instance is not available
                             //As an alternative the featrue can be implemented through Process Discovery as well (similarly to 'discoverProcessGroupMembers') 
                             break;

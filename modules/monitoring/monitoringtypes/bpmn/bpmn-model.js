@@ -8,7 +8,7 @@ const { BpmnTask, BpmnConnection, BpmnGateway, BpmnEvent, BpmnBlockOverlayReport
 class BpmnModel {
     /**
      * 
-     * @param {String} perspectiveName Name of Process Perspective the BpmnModel instnace embodies
+     * @param {String} perspectiveName Name of Process Perspective the BpmnModel instance embodies
      * @param {String} modelXml Valid XML String describing the BPMN model (both process and diagram (visualization))
      */
     constructor(perspectiveName, modelXml) {

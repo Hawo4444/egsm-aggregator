@@ -28,6 +28,7 @@ class EgsmStage {
         this.history = []
         this.latest_change = null
         this.recordHistory()
+        this.condition = false
     }
 
     /**

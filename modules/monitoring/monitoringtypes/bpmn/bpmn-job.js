@@ -38,6 +38,7 @@ class BpmnJob extends Job {
             messageObj.state = 'open'
           }
           egsm.updateStage(messageObj.stage_name, messageObj.status.toUpperCase(), messageObj.state.toUpperCase(), messageObj.compliance.toUpperCase())
+          //This would trigger checking process flow guards and if they change, we record history
           var deviations = perspective.analyze()
           this.triggerCompleteUpdateEvent()
           console.log(deviations)

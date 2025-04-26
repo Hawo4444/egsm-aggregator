@@ -126,7 +126,7 @@ class Job {
     /**
      * Notifies Stakeholders
      * @param {String} processtype Type of the Process 
-     * @param {String} instanceid Instnace ID of the Process
+     * @param {String} instanceid Instance ID of the Process
      * @param {String} processperspective Process Perspective
      * @param {Object} errors Object containing Errors
      */

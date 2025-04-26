@@ -211,7 +211,7 @@ function setMonitoringManager(manager) {
  * @param {Object} rules Rules the Engines should satisfy. 
  * The function broadcasts a message which is received by each Workers. If any of them has at least one engine satisfying the rules it will reply
  * Finally the function receives the reply, and builds a set containing all Process Instances which has at least one engine among the received replies 
- * @returns Promise will contain a set of Engine Id-s (<Process Type>/<Instnace ID>)
+ * @returns Promise will contain a set of Engine Id-s (<Process Type>/<Instance ID>)
  */
 async function discoverProcessGroupMembers(rules) {
     var request_id = UUID.v4();

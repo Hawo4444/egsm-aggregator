@@ -113,7 +113,7 @@ class ArtifactEventProcessing extends Job {
      * otherwise it will wait for it and add it to the map
      * @param {Map} processmap Map containing Process Instances 
      * @param {String} processtype Type of the requested Process Instance 
-     * @param {String} instanceid Instance ID of the requested Process Instnace
+     * @param {String} instanceid Instance ID of the requested Process Instance
      * @returns A Promise will be resolved when the requested information becomes available
      */
     checkProcessInstanceState(processmap, processtype, instanceid) {
