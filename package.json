@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest --coverage",
+    "test:coverage:process": "jest modules/test/process-perspective.test.js --coverage --collectCoverageFrom='modules/monitoring/monitoringtypes/bpmn/process-perspective.js' && start coverage/lcov-report/index.html"
   },
   "repository": {
     "type": "git",
@@ -24,5 +25,8 @@
     "package.json": "^2.0.1",
     "websocket": "^1.0.35"
   },
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
 }
