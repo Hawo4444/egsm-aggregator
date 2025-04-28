@@ -32,8 +32,8 @@ class SkipDeviation extends Deviation {
  */
 class OverlapDeviation extends Deviation {
     /**
-     * @param {String[]} overlapped The skipped stage(s) 
-     * @param {String} open The upcoming stage after the skipped sequence (OutOfOrder Stage)
+     * @param {String[]} overlapped The stage(s) that were executed after the stage that caused the overlap 
+     * @param {String} open The stage that was supposed to be closed, but was not
      * @param {Number} index The parent stage's open-close pair index this deviation belongs to
      */
     constructor(overlapped, open, index) {
@@ -465,7 +465,7 @@ class ProcessPerspective {
                         }
                     } else {
                         var condition = stage.getConditionAt(stage.getLatestOpening().timestamp)
-                        if (condition?.value === false) {
+                        if (condition === false) {
                             deviations.push(new IncorrectBranchDeviation(outOfOrderElement))
                         }
                     }

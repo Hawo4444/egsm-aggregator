@@ -1245,6 +1245,9 @@ test('EXCLUSIVE - Executing and incorrect branch', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch2.update(undefined, 'CLOSED', undefined)
 
@@ -1287,6 +1290,9 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should be clos
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch1.update(undefined, 'OPEN', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
@@ -1329,6 +1335,9 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should not be 
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch1.update(undefined, 'OPEN', undefined)
 
   var expected = []
@@ -1371,6 +1380,9 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should be clo
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
   ch1.update(undefined, undefined, 'SKIPPED')
@@ -1414,6 +1426,9 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should not be
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
 
   var expected = [new IncorrectBranchDeviation('ch2')]
@@ -1455,6 +1470,9 @@ test('EXCLUSIVE - Partially executing a correct branch and executing an incorrec
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch2.update(undefined, 'CLOSED', undefined)
@@ -1500,6 +1518,9 @@ test('EXCLUSIVE - Partially executing a correct branch and executing an incorrec
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch2.update(undefined, 'CLOSED', undefined)
@@ -1545,6 +1566,9 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
@@ -1589,6 +1613,9 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
@@ -1632,6 +1659,9 @@ test('EXCLUSIVE - Overlapped executions', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch1.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'CLOSED', undefined)
@@ -1677,6 +1707,9 @@ test('INCLUSIVE - Executing one of the correct branches twice', async () => {
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
   ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
@@ -1724,6 +1757,9 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
@@ -1768,6 +1804,9 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', undefined)
   ch2.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
@@ -1811,6 +1850,9 @@ test('INCLUSIVE - Executing unintended branch beside the correct ones', async ()
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
   ch1.update(undefined, 'OPEN', undefined)
@@ -1859,6 +1901,9 @@ test('INCLUSIVE - Executing multiple unintended branches beside the correct one'
 
   //Simulating the process flow
   stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
@@ -2267,6 +2312,7 @@ test('SEQUENCE&PARALLEL - Incomplete parallel stage execution', async () => {
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [ 
+    new OverlapDeviation(['ch4'], 'parallel'),
     new IncompleteDeviation('parallel'), 
     new IncompleteDeviation('ch3')]
   var data = pers1.analyze()
@@ -2274,7 +2320,7 @@ test('SEQUENCE&PARALLEL - Incomplete parallel stage execution', async () => {
   expect(data).toEqual(expected)
 })
 
-//Consider adding test where both branches CLOSED and then the one reopens so parent reopens
+//Consider adding test where both branches CLOSED and then one reopens so parent reopens
 test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async () => {
   //e, A, A, B, f
   //Children stages
@@ -2332,7 +2378,7 @@ test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async ()
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new MultiExecutionDeviation('ch2')]
+  var expected = [new MultiExecutionDeviation('ch2', 2)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2383,6 +2429,8 @@ test('SEQUENCE&EXCLUSIVE - Executing an incorrect exclusive branch', async () =>
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
@@ -2444,6 +2492,8 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
@@ -2454,6 +2504,7 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
+    new OverlapDeviation(['ch4'], 'exclusive'),
     new IncompleteDeviation('exclusive'), 
     new IncorrectBranchDeviation('ch3'), 
     new SkipDeviation(['ch2'], 'NA')]
@@ -2508,6 +2559,8 @@ test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
   stage1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
   stage2.update(undefined, 'OPEN', undefined)
   ch3.update(undefined, 'OPEN', 'OUTOFORDER')
   ch3.update(undefined, 'CLOSED', undefined)
@@ -2518,6 +2571,7 @@ test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
+    new OverlapDeviation(['ch4'], 'inclusive'),
     new IncompleteDeviation('inclusive'),
     new IncorrectBranchDeviation('ch3')]
   var data = pers1.analyze()
@@ -2570,6 +2624,8 @@ test('SEQUENCE&INCLUSIVE - Incomplete branch execution', async () => {
  stage1.update(undefined, 'OPEN', undefined)
  ch1.update(undefined, 'OPEN', undefined)
  ch1.update(undefined, 'CLOSED', undefined)
+ eGSM.recordStageCondition('ch2', true)
+ eGSM.recordStageCondition('ch3', true)
  stage2.update(undefined, 'OPEN', undefined)
  ch3.update(undefined, 'OPEN', undefined)
  ch2.update(undefined, undefined, 'SKIPPED')//not sure here
@@ -2579,6 +2635,7 @@ test('SEQUENCE&INCLUSIVE - Incomplete branch execution', async () => {
  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
+    new OverlapDeviation(['ch4'], 'inclusive'),
     new IncompleteDeviation('inclusive'), 
     new IncompleteDeviation('ch3')]
   var data = pers1.analyze()

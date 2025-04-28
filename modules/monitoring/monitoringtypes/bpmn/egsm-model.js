@@ -31,6 +31,25 @@ class EgsmModel {
     }
 
     /**
+     * Update a condition of a stage in the model
+     * Will only be applied if the parent of the stage is a valid type (INCLUSIVE, EXCLUSIVE, ITERATION)
+     * @param {*} stageId ID to specify the Stage to update
+     * @param {*} value New condition value - boolean
+     */
+    recordStageCondition(stageId, value) {
+        var stage = this.stages.get(stageId)
+        var parentId = stage.parent
+        if (!this.stages.has(parentId)) {
+            return
+        }
+        var parent = this.stages.get(parentId)
+        if (parent.type !== 'INCLUSIVE' && parent.type !== 'EXCLUSIVE' && parent.type !== 'ITERATION') {
+            return
+        }
+        stage.recordCondition(value)
+    }
+
+    /**
      * Apply a snapshot to drive the model to a desired state
      * @param {Object} snapshot List of Objects representing the State of each Stages 
      */

@@ -139,9 +139,6 @@ class EgsmStage {
     }
 
     recordCondition(value) {
-        if (this.parent !== 'INCLUSIVE' && this.parent !== 'EXCLUSIVE' && this.parent !== 'ITERATION') {
-            return
-        }
         const timestamp = performance.now()
         this.condition_history.push({
             timestamp: timestamp,
