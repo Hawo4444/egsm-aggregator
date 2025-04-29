@@ -115,7 +115,7 @@ test('SEQUENCE - One stage skipped', async () => {
   ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new SkipDeviation(['ch2'], 'ch3')]
+  var expected = [new SkipDeviation(['ch2'], 'ch3', 0, -1)]
   var data = pers1.analyze()
   expect(data).toEqual(expected)
 })
@@ -163,7 +163,7 @@ test('SEQUENCE - Multiple stages skipped', async () => {
   ch4.update(undefined, 'OPEN', 'OUTOFORDER')
   ch4.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new SkipDeviation(['ch2', 'ch3'], 'ch4')]
+  var expected = [new SkipDeviation(['ch2', 'ch3'], 'ch4', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -214,7 +214,7 @@ test('SEQUENCE - Start event skipped', async () => {
   ch4.update(undefined, 'OPEN', undefined)
   ch4.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new SkipDeviation(['ch1'], 'ch2')]
+  var expected = [new SkipDeviation(['ch1'], 'ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -265,7 +265,7 @@ test('SEQUENCE - Last event not executed and parent should be closed', async () 
   ch3.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new SkipDeviation(['ch4'], null)]
+  var expected = [new SkipDeviation(['ch4'], null, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -312,7 +312,7 @@ test('SEQUENCE - Only first event executed and parent should be closed', async (
   ch1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new SkipDeviation(['ch4', 'ch3', 'ch2'], null)]
+  var expected = [new SkipDeviation(['ch4', 'ch3', 'ch2'], null, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -359,7 +359,7 @@ test('SEQUENCE - Multiple stages including start event skipped', async () => {
   ch4.update(undefined, 'OPEN', 'OUTOFORDER')
   ch4.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new SkipDeviation(['ch1', 'ch2', 'ch3'], 'ch4')]
+  var expected = [new SkipDeviation(['ch1', 'ch2', 'ch3'], 'ch4', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -415,7 +415,7 @@ test('SEQUENCE - Multi-execution of a stage', async () => {
   stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new MultiExecutionDeviation('ch2', 2)]
+    new MultiExecutionDeviation('ch2', 2, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -475,7 +475,7 @@ test('SEQUENCE - Multi-execution of a stage more than twice', async () => {
   stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new MultiExecutionDeviation('ch2', 4)]
+    new MultiExecutionDeviation('ch2', 4, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -533,7 +533,7 @@ test('SEQUENCE - Multi-execution of an event more than twice', async () => {
   stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new MultiExecutionDeviation('ch1', 3)]
+    new MultiExecutionDeviation('ch1', 3, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -587,7 +587,7 @@ test('SEQUENCE - Incorrect execution sequence including 2 stages', async () => {
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectExecutionSequenceDeviation('ch2', 'ch3')]
+  var expected = [new IncorrectExecutionSequenceDeviation('ch2', 'ch3', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -640,8 +640,8 @@ test('SEQUENCE - Stage opened but not finished - parent should be closed', async
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new OverlapDeviation(['ch3', 'ch4'], 'ch2'),
-    new IncompleteDeviation('ch2')]
+    new OverlapDeviation(['ch3', 'ch4'], 'ch2', 0, -1),
+    new IncompleteDeviation('ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -693,8 +693,8 @@ test('SEQUENCE - Stage opened but not finished - parent should not be closed', a
   ch4.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new OverlapDeviation(['ch3', 'ch4'], 'ch2'),
-    new IncompleteDeviation('ch2')]
+    new OverlapDeviation(['ch3', 'ch4'], 'ch2', 0, -1),
+    new IncompleteDeviation('ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -749,8 +749,8 @@ test('SEQUENCE - Overlapped activities', async () => {
   stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new OverlapDeviation(['ch2'], 'ch3'),
-    new IncorrectExecutionSequenceDeviation('ch2', 'ch3')]
+    new OverlapDeviation(['ch2'], 'ch3', 0, -1),
+    new IncorrectExecutionSequenceDeviation('ch2', 'ch3', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -791,7 +791,7 @@ test('PARALLEL - One stage not executed at all - parent should be closed', async
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new SkipDeviation(['ch1'], 'NA')]
+    new SkipDeviation(['ch1'], 'NA', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -870,7 +870,7 @@ test('PARALLEL - One stage opened but not closed - parent should be closed', asy
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new IncompleteDeviation('ch1')]
+    new IncompleteDeviation('ch1', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -953,8 +953,8 @@ test('PARALLEL - Multiple stages not executed - parent should be closed', async 
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new SkipDeviation(['ch1'], 'NA'),
-    new SkipDeviation(['ch2'], 'NA')]
+    new SkipDeviation(['ch1'], 'NA', 0, -1),
+    new SkipDeviation(['ch2'], 'NA', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1049,7 +1049,7 @@ test('PARALLEL - Multi-executing a stage - parent should be closed', async () =>
   stage1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new MultiExecutionDeviation('ch1', 2)]
+  var expected = [new MultiExecutionDeviation('ch1', 2, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1098,7 +1098,7 @@ test('PARALLEL - Multi-executing a stage - parent should not be closed yet', asy
   ch3.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new MultiExecutionDeviation('ch1', 2)]
+  var expected = [new MultiExecutionDeviation('ch1', 2, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1151,8 +1151,8 @@ test('PARALLEL - Multi-executing more than one stages - parent should be closed'
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new MultiExecutionDeviation('ch1', 2),
-    new MultiExecutionDeviation('ch2', 2)]
+    new MultiExecutionDeviation('ch1', 2, 0, -1),
+    new MultiExecutionDeviation('ch2', 2, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1204,8 +1204,8 @@ test('PARALLEL - Multi-executing more than one stages - parent should not be clo
   stage1.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new MultiExecutionDeviation('ch1', 2),
-    new MultiExecutionDeviation('ch2', 2)]
+    new MultiExecutionDeviation('ch1', 2, 0, -1),
+    new MultiExecutionDeviation('ch2', 2, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1251,7 +1251,7 @@ test('EXCLUSIVE - Executing and incorrect branch', async () => {
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch2.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectBranchDeviation('ch2')]
+  var expected = [new IncorrectBranchDeviation('ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1296,7 +1296,7 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should be clos
   ch1.update(undefined, 'OPEN', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncompleteDeviation('ch1')]
+  var expected = [new IncompleteDeviation('ch1', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1387,7 +1387,11 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should be clo
   stage1.propagateCondition('SHOULD_BE_CLOSED')
   ch1.update(undefined, undefined, 'SKIPPED')
 
-  var expected = [new IncompleteDeviation('ch2'), new IncorrectBranchDeviation('ch2'), new SkipDeviation(['ch1'], 'NA')]
+  var expected = [
+    new IncompleteDeviation('ch2', 0, -1), 
+    new IncorrectBranchDeviation('ch2', 0, -1), 
+    new SkipDeviation(['ch1'], 'NA', 0, -1)
+  ]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1431,7 +1435,7 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should not be
   eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
 
-  var expected = [new IncorrectBranchDeviation('ch2')]
+  var expected = [new IncorrectBranchDeviation('ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1477,7 +1481,7 @@ test('EXCLUSIVE - Partially executing a correct branch and executing an incorrec
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch2.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectBranchDeviation('ch2')]
+  var expected = [new IncorrectBranchDeviation('ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1526,7 +1530,10 @@ test('EXCLUSIVE - Partially executing a correct branch and executing an incorrec
   ch2.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncompleteDeviation('ch1'), new IncorrectBranchDeviation('ch2')]
+  var expected = [
+    new IncompleteDeviation('ch1', 0, -1), 
+    new IncorrectBranchDeviation('ch2', 0, -1)
+  ]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1574,7 +1581,10 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
   ch1.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncompleteDeviation('ch2'), new IncorrectBranchDeviation('ch2')]
+  var expected = [
+    new IncompleteDeviation('ch2', 0, -1), 
+    new IncorrectBranchDeviation('ch2', 0, -1)
+  ]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1620,7 +1630,7 @@ test('EXCLUSIVE - Partially executing an incorrect branch and executing the corr
   ch1.update(undefined, 'OPEN', undefined)
   ch1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectBranchDeviation('ch2')]
+  var expected = [new IncorrectBranchDeviation('ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1666,7 +1676,7 @@ test('EXCLUSIVE - Overlapped executions', async () => {
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectBranchDeviation('ch2')]
+  var expected = [new IncorrectBranchDeviation('ch2', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1718,7 +1728,7 @@ test('INCLUSIVE - Executing one of the correct branches twice', async () => {
   ch2.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new MultiExecutionDeviation('ch1', 2)]
+  var expected = [new MultiExecutionDeviation('ch1', 2, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1765,7 +1775,7 @@ test('INCLUSIVE - Executing one of the correct branches partially only - parent 
   ch1.update(undefined, 'OPEN', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncompleteDeviation('ch1')]
+  var expected = [new IncompleteDeviation('ch1', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1861,7 +1871,7 @@ test('INCLUSIVE - Executing unintended branch beside the correct ones', async ()
   ch2.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectBranchDeviation('ch3')]
+  var expected = [new IncorrectBranchDeviation('ch3', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1912,7 +1922,10 @@ test('INCLUSIVE - Executing multiple unintended branches beside the correct one'
   ch1.update(undefined, 'CLOSED', undefined)
   stage1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectBranchDeviation('ch2'), new IncorrectBranchDeviation('ch3')]
+  var expected = [
+    new IncorrectBranchDeviation('ch2', 0, -1), 
+    new IncorrectBranchDeviation('ch3', 0, -1)
+  ]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2261,7 +2274,11 @@ test('SEQUENCE&PARALLEL - Missing parallel stage execution', async () => {
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new SkipDeviation(['parallel'], 'ch4')]
+  var expected = [
+    new SkipDeviation(['parallel'], 'ch4', 0, -1),
+    new SkipDeviation(['ch2'], 'NA', 0, -1),
+    new SkipDeviation(['ch3'], 'NA', 0, -1)
+  ]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2323,9 +2340,9 @@ test('SEQUENCE&PARALLEL - Incomplete parallel stage execution', async () => {
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [ 
-    new OverlapDeviation(['ch4'], 'parallel'),
-    new IncompleteDeviation('parallel'), 
-    new IncompleteDeviation('ch3')]
+    new OverlapDeviation(['ch4'], 'parallel', 0, -1),
+    new IncompleteDeviation('parallel', 0, -1), 
+    new IncompleteDeviation('ch3', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2389,7 +2406,7 @@ test('SEQUENCE&PARALLEL - Executing one parallel stage more than once', async ()
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new MultiExecutionDeviation('ch2', 2)]
+  var expected = [new MultiExecutionDeviation('ch2', 2, 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2452,7 +2469,7 @@ test('SEQUENCE&EXCLUSIVE - Executing an incorrect exclusive branch', async () =>
   ch4.update(undefined, 'CLOSED', undefined)
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
-  var expected = [new IncorrectBranchDeviation('ch3')]
+  var expected = [new IncorrectBranchDeviation('ch3', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2515,10 +2532,10 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new OverlapDeviation(['ch4'], 'exclusive'),
-    new IncompleteDeviation('exclusive'), 
-    new IncorrectBranchDeviation('ch3'), 
-    new SkipDeviation(['ch2'], 'NA')]
+    new OverlapDeviation(['ch4'], 'exclusive', 0, -1),
+    new IncompleteDeviation('exclusive', 0, -1), 
+    new IncorrectBranchDeviation('ch3', 0, -1), 
+    new SkipDeviation(['ch2'], 'NA', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2582,9 +2599,9 @@ test('SEQUENCE&INCLUSIVE - Executing an incorrect branch', async () => {
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new OverlapDeviation(['ch4'], 'inclusive'),
-    new IncompleteDeviation('inclusive'),
-    new IncorrectBranchDeviation('ch3')]
+    new OverlapDeviation(['ch4'], 'inclusive', 0, -1),
+    new IncompleteDeviation('inclusive', 0, -1),
+    new IncorrectBranchDeviation('ch3', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2646,9 +2663,9 @@ test('SEQUENCE&INCLUSIVE - Incomplete branch execution', async () => {
  stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new OverlapDeviation(['ch4'], 'inclusive'),
-    new IncompleteDeviation('inclusive'), 
-    new IncompleteDeviation('ch3')]
+    new OverlapDeviation(['ch4'], 'inclusive', 0, -1),
+    new IncompleteDeviation('inclusive', 0, -1), 
+    new IncompleteDeviation('ch3', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2746,10 +2763,11 @@ test('EXCLUSIVE&SEQUENCE - Correct sequence branch reopens', async () => {
   parent.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new MultiExecutionDeviation('stage2', 2, 0, null),
-    new SkipDeviation(['ch3'], 'NA', 2, null),
-    new IncompleteDeviation('stage1', 2, null),
-    new IncompleteDeviation('stage2', 2, null)
+    new OverlapDeviation(['ch5'], 'exclusive', 0, -1),
+    new IncompleteDeviation('exclusive', 0, -1),
+    new MultiExecutionDeviation('exclusive', 3, 0, -1),
+    new IncompleteDeviation('sequence', 2, -1),
+    new SkipDeviation(['ch3'], null, 2, -1)
   ]
   var data = pers1.analyze()
   console.log(data)

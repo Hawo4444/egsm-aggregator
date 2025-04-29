@@ -70,7 +70,10 @@ class EgsmStage {
      * Returns the latest change before a timestamp
      * @param {Number} before Timestamp to check against
     */
-    getLatestChange(before) {
+    getLatestChange(before = null) {
+        if (before == null) {
+            return this.history[this.history.length - 1]
+        }
         for (let i = this.history.length - 1; i >= 0; i--) {
             if (this.history[i].timestamp < before) {
                 return this.history[i]
@@ -158,11 +161,18 @@ class EgsmStage {
         return latest ? latest.value : null
     }
 
-    getLatestCondition() {
-        if (this.condition_history.length > 0) {
-            return this.condition_history[this.condition_history.length - 1].value
+    getLatestCondition(before = null) {
+        if (this.condition_history.length === 0) return null;
+    
+        if (before === null) {
+            return this.condition_history[this.condition_history.length - 1].value;
         }
-        return null
+        for (let i = this.condition_history.length - 1; i >= 0; i--) {
+            if (this.condition_history[i].timestamp < before) {
+                return this.condition_history[i].value;
+            }
+        }
+        return null;
     }
 
     /**
