@@ -274,7 +274,8 @@ class ProcessPerspective {
                                 deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
                             }
                         }else if (!foundClosing) {
-                            if ((item.parent && item.parent.propagated_conditions.has('SHOULD_BE_CLOSED'))) {
+                            var stage = this.egsm_model.stages.get(item.id)
+                            if ((stage?.parent && this.egsm_model.stages.get(stage.parent).propagated_conditions.has('SHOULD_BE_CLOSED'))) {
                                 deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
                                 this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED')
                             }
@@ -283,14 +284,6 @@ class ProcessPerspective {
                 }
 
                 //-MULTIEXECUTION deviation-
-                /*this.egsm_model.stages.forEach((stage, key) => {
-                    if (stage.compliance === 'OUTOFORDER') {
-                        var count = processFlow.filter(item => item.id === key && item.state === "OPEN").length;
-                        if (count > 1) {
-                            deviations.push(new MultiExecutionDeviation(key, count, parentPairIndex, iterationIndex))
-                        }
-                    }
-                });*/
                 outOfOrder.forEach(outOfOrderElement => {
                     var count = processFlow.filter(item => item.id === outOfOrderElement && item.state === "OPEN").length;
                     if (count > 1) {
@@ -417,20 +410,7 @@ class ProcessPerspective {
                         this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
                     });
                 }
-                /*children.forEach(childId => {
-                    var child = this.egsm_model.stages.get(childId)
-                    var count = 0
-                    if (child.compliance === 'OUTOFORDER') {
-                        child.getHistory().forEach(e => {
-                            if (e.state === 'OPEN') {
-                                count++
-                            }
-                        });
-                        if (count > 1) {
-                            deviations.push(new MultiExecutionDeviation(childId, count, parentPairIndex, iterationIndex))
-                        }
-                    }
-                });*/
+                
                 outOfOrder.forEach(outOfOrderElement => {
                     var count = 0               
                     this.egsm_model.stages.get(outOfOrderElement).getHistory().forEach(e => {
@@ -524,19 +504,6 @@ class ProcessPerspective {
                 });
 
                 //-SKIP deviation-
-                /*if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    children.forEach(childId => {
-                        var child = this.egsm_model.stages.get(childId)
-                        if (child.state == 'UNOPENED') {
-                            //what time to choose? for now latest one
-                            var condition = child.getLatestCondition(parentPair.close)
-                            if (condition?.value === true) {
-                                deviations.push(new SkipDeviation([childId], null, parentPairIndex, iterationIndex))
-                                this.egsm_model.stages.get(childId).propagateCondition('SHOULD_BE_CLOSED')
-                            }
-                        }
-                    });
-                }*/
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     unopened.forEach(unopenedElement => {
                         var condition = this.egsm_model.stages.get(unopenedElement).getLatestCondition(parentPair.close)
@@ -558,45 +525,40 @@ class ProcessPerspective {
                 }
                 break;
             case 'ITERATION':
-                //Skipped branch - a1 will be skipped at the end of the iteration, but also in case of skipped iteration, a1 or both may be skipped depending of the condition
-                skipped.forEach(skippedElement => {
-                    deviations.push(new SkipDeviation([skippedElement], 'NA'))
-                    this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED')
-                });
-
                 //Incomplete iteration - open iteration and has should be closed
                 //Skipped iteration - unopened iteration and parent loop has skipped OR closed iteration parent loop has should be closed
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     if (open.size > 0) {
-                        deviations.push(new IncompleteDeviation(currentStage.id))
-                        open.forEach(openElement => {
+                        deviations.push(new IncompleteDeviation(currentStage.id, parentPairIndex, iterationIndex))
+                        /*open.forEach(openElement => {
                             //Incomplete branch - one of the branches is opened and the parent loop should be closed - only when we have incomplete iteration
-                            deviations.push(new IncompleteDeviation(openElement))
+                            deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex))
                             this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
-                        });
+                        });*/
                     }
                     
-                    if (currentStage.state === 'UNOPENED' ) {
-                        deviations.push(new SkipDeviation([currentStage.id], null)) //TODO: here we add skip deviation for the entire iteration, I would add last iteration+1 as index
+                    //if (currentStage.state === 'UNOPENED' ) {//TODO, check how this behaves .getLatestChange(parentPair?.close + 0.01? or similar), otherwise =< in method
+                    if (currentStage.parentPair?.close === null && currentStage.state === 'UNOPENED' ) { //now checking current state, so depends if new iteration can start from unopened 
+                        deviations.push(new SkipDeviation([currentStage.id], parentPairIndex + 1, iterationIndex)) //TODO: here we add skip deviation for the entire iteration, I would add last iteration+1 as index
                         //add skip to a1 as well, or both if exit condition is false? - maybe iteration skip is enough though
-                    } else if (currentStage.state === 'CLOSED') {
+                    } else if (currentStage.state === 'CLOSED') { //TODO: consider getLatestChange
                         //how can we tell whether the last iteration exited as intended?
                         //a2 would be unopened and a1 closed
-                        if (this.egsm_model.stages.get(currentStage.children[1]).state !== 'UNOPENED') {
-                            deviations.push(new SkipDeviation([currentStage.id], null)) //TODO: here we add skip deviation for the entire iteration, I would add last iteration+1 as index 
+                        if (this.egsm_model.stages.get(currentStage.children[1]).state !== 'UNOPENED') { //TODO consider getLatestChange
+                            deviations.push(new SkipDeviation([currentStage.id], parentPairIndex + 1, iterationIndex)) //TODO: here we add skip deviation for the entire iteration, I would add last iteration+1 as index 
                         }
                     }
                 }
 
-                //now I need to be explicit instead of guessing whether it is unopened at 0
+                //Overlap - do the same as in sequence
                 var processFlow = this._getProcessFlow(children, parentPair)
                 for (let i = 0; i < processFlow.length; i++) {
-                    let item = processFlow[i];
+                    var item = processFlow[i];
                     if (item.state === "OPEN") {
-                        let overlapped = []
-                        let foundClosing = false
+                        var overlapped = []
+                        var foundClosing = false
                         for (let j = i + 1; j < processFlow.length; j++) {
-                            let nextItem = processFlow[j]
+                            var nextItem = processFlow[j]
                             if (nextItem.state === "OPEN") {
                                 overlapped.push(nextItem.id);
                             } else if (nextItem.state === "CLOSED" && item.id === nextItem.id) {
@@ -605,43 +567,57 @@ class ProcessPerspective {
                             }
                         }
                         if (overlapped.length > 0) {
-                            //If the overlap is caused by non-basic stage, we could propagate some condition to find the specific cause
-                            deviations.push(new OverlapDeviation(overlapped, item.id))
+                            deviations.push(new OverlapDeviation(overlapped, item.id, parentPairIndex, iterationIndex))
                             this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED') //TODO: this may depend on the order!
                             if (!foundClosing) {
-                                deviations.push(new IncompleteDeviation(item.id))
+                                deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
                             }
-                        }else if (!foundClosing) {
-                            if ((item.parent && item.parent.propagated_conditions.has('SHOULD_BE_CLOSED'))) {
-                                deviations.push(new IncompleteDeviation(item.id))
+                        } else if (!foundClosing) {
+                            var stage = this.egsm_model.stages.get(item.id)
+                            if ((stage?.parent && this.egsm_model.stages.get(stage.parent).propagated_conditions.has('SHOULD_BE_CLOSED'))) {
+                                deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
                                 this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED')
                             }
                         }
                     }
                 }
 
+                //Skipped branch - a1 will be skipped at the end of the iteration, but also in case of skipped iteration, a1 or both may be skipped depending of the condition
+                //Incorrect branch - only when we have a1 skipped and then a2, altough a1 may still open in which case incorrect order as well
+                skipped.forEach(skippedElement => {
+                    deviations.push(new SkipDeviation([skippedElement], 'NA', parentPairIndex, iterationIndex))
+                    this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED')
+                    //A1 only can be skipped, so if we have an OoO element, we know a2 has opened hence incorrect branch
+                    if (skipped.length > 0) {
+                        deviations.push(new IncorrectBranchDeviation(skipped[0], parentPairIndex, iterationIndex))
+                    }
+                });
+
                 //-MULTIEXECUTION deviation-
-                this.egsm_model.stages.forEach((stage, key) => {
-                    if (stage.compliance === 'OUTOFORDER') {
-                        var count = processFlow.filter(item => item.id === key && item.state === "OPEN").length;
-                        if (count > 1) {
-                            deviations.push(new MultiExecutionDeviation(key, count))
-                        }
+                //Multi execution - within the iteration, count openings
+                outOfOrder.forEach(outOfOrderElement => {
+                    var count = processFlow.filter(item => item.id === outOfOrderElement && item.state === "OPEN").length;
+                    if (count > 1) {
+                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex))
                     }
                 });
 
                 //-INCORRECTEXECUTIONSEQUENCE and SKIP deviation-
+                //Incorrect order - same as in sequence, except now it needs to be a1 that is skipped first and then out of order, a2 will then also be outoforder without a chance of ever being ontime
+                //TODO: could have simpler logic because of stricter order
                 var skippings = new Map() //OoO stage -> skipped sequence (skipped stages later extended by Unopened Stages before the Skipped one)
-                this.egsm_model.stages.forEach((_, key) => {
+                currentStage.children.forEach(childId => {
                     var skippedFound = false
                     var openOutOfOrderFound = false
                     var previousStage = null
-                    var firstFound = false
+                    var firstFound = false //TODO: could consider getting rid of this depending on how the engine resets the inner stages
                     for (let i = 0; i < processFlow.length; i++) {
-                        if (processFlow[i].id === key) {
+                        if (processFlow[i].id === childId) {
                             if (!firstFound) {
                                 firstFound = true
-                                continue;
+                                if (processFlow[i].state === 'UNOPENED' && processFlow[i].compliance === 'ONTIME') {
+                                    continue;
+                                }
                             }
                             if (!skippedFound) {
                                 if (processFlow[i].compliance !== 'SKIPPED') {
@@ -665,8 +641,8 @@ class ProcessPerspective {
                     }
                     if (skippedFound) {
                         if (openOutOfOrderFound) {
-                            deviations.push(new IncorrectExecutionSequenceDeviation(key, previousStage))
-                        } else {      
+                            deviations.push(new IncorrectExecutionSequenceDeviation(childId, previousStage, parentPairIndex, iterationIndex))
+                        } /*else {      
                             //If there is any SKIPPED stage among children it suggests, that at least one child activity has been skipped
                             //furthermore, at least one OoO child stage must exist                     
                             outOfOrder.forEach(outOfOrderElement => {
@@ -691,16 +667,10 @@ class ProcessPerspective {
                                     }
                                 });
                             }
-                        }
+                        }*/
                     }
                 });
-                
-                //Incorrect branch - only when we have a1 skipped and then a2, altough a1 may still open in which case incorrect order as well
-                //Overlap - do the same as in sequence
-                //Multi execution - within the iteration, count openings
-                //Incorrect order - same as in sequence, except now it needs to be a1 that is skipped first and then out of order, a2 will then also be outoforder without a chance of ever being ontime
-             
-                //For each OutOfOrder stage we can create an IncorrectExecutionSequence instance
+                 //For each OutOfOrder stage we can create an IncorrectExecutionSequence instance
                 /*outOfOrder.forEach(outOfOrderElement => {
                     deviations.push(new IncorrectExecutionSequenceDeviation([outOfOrderElement]))
                 });*/
@@ -722,9 +692,11 @@ class ProcessPerspective {
 
     _getProcessFlow(children, pair) {
         let processFlow = [];
+        if (pair == null) {
+            return processFlow;
+        }
         for (let key in children) {
             const history = this.egsm_model.stages.get(children[key]).getHistory();
-            
             for (let change of history) {
                 if (change.timestamp < pair.open) {
                     continue;
