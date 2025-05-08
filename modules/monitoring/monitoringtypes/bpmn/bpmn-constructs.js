@@ -35,10 +35,11 @@ class BpmnBlock {
 
     /**
      * Adding a new deviation to the Block
-     * @param {String} deviation 
+     * @param {Object} deviation 
+     * @param {Object} [details] - Additional data related to the deviation (optional)
      */
-    addDeviation(deviation) {
-        this.deviations.push(deviation)
+    addDeviation(deviation, details) {
+        this.deviations.push({ deviation, details });
     }
 
     /**
@@ -233,6 +234,7 @@ class BpmnBlockOverlayReport {
 }
 
 module.exports = {
+    BpmnBlock,
     BpmnTask,
     BpmnGateway,
     BpmnEvent,

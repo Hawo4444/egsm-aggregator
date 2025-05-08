@@ -1,3 +1,5 @@
+const fs = require('fs');
+const debugLog = fs.createWriteStream('debug.log', { flags: 'w' });
 /**
  * Class representing an eGSM Stage
  */
@@ -182,6 +184,9 @@ class EgsmStage {
      * @param {String} compliance New Compliance
      */
     update(status, state, compliance) {
+        if (this.status === status && this.state === state && this.compliance === compliance) {
+            return
+        }
         if (status) {
             this.status = status
         }
@@ -192,6 +197,7 @@ class EgsmStage {
             this.compliance = compliance
         }
         this.recordHistory()
+        debugLog.write(new Date().toISOString() + ' - ' + this.type + ': ' + this.id + ', status: ' + status + ', state: ' + state + ' compliance: ' + compliance + '\n');        
     }
 
     /**
@@ -242,7 +248,7 @@ class EgsmStage {
         else if (this.id.includes('Parallel')) {
             return 'PARALLEL'
         }
-        else if(this.id.includes('_LC')){
+        else if(this.id.includes('_LC')) {
             return 'LIFECYCLE'
         }
         else if (this.id.includes('ExclusiveGateway')) {

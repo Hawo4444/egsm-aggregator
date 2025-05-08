@@ -67,9 +67,13 @@ class EgsmModel {
      */
     _parseStageRecursive(stage, parent) {
         var children = stage['ca:SubStage'] || []
-        this.stages.set(stage['$'].id, new EgsmStage(stage['$'].id, stage['$'].name, parent, undefined,
+        var stageId = stage['$'].id
+        this.stages.set(stageId, new EgsmStage(stage['$'].id, stage['$'].name, parent, undefined,
             (parent != 'NONE' && this.stages.get(parent).type == 'SEQUENCE' && this.stages.get(parent).type != 'LIFECYCLE') ?
                 stage?.['ca:ProcessFlowGuard']?.[0]?.['$'].expression : undefined))
+        if (children[Object.keys(children)[0]]?.['$']?.id?.includes('iteration')) {
+            this.stages.get(stageId).type = 'LOOP'
+        }
         for (var key in children) {
             this.stages.get(stage['$'].id).addChild(children[key]['$'].id)
             this._parseStageRecursive(children[key], stage['$'].id)
