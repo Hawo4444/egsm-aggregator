@@ -256,7 +256,8 @@ class BpmnModel {
                         var waypoints = [this.constructs.get(inputEdge).waypoints[0], new Point(this.constructs.get(inputEdge).waypoints[0].x, 450),
                         new Point(this.constructs.get(outputEdge).waypoints.at(-1).x, 450),
                         this.constructs.get(outputEdge).waypoints.at(-1)]
-                        this._addSkippingEdgeToModel(UUID.v4(), waypoints, source, destination)
+                        var edgeId = this._getNextSequenceId()
+                        this._addSkippingEdgeToModel("SequenceFlow_14", waypoints, source, destination)
                     }
                     //StartEvent has been skipped, we need to add a virtual start event to draw the skipping edge
                     if (source == 'NONE' && destination != 'NONE') {
@@ -359,7 +360,13 @@ class BpmnModel {
                 sourceElement: 'BPMNShape_' + sourceNode,
                 targetElement: 'BPMNShape_' + targetNode
             },
-            'di:waypoint': []
+            'di:waypoint': [],
+            'bpmndi:BPMNLabel': {
+                $: {
+                    id: 'BPMNLabel_' + id,
+                    labelStyle: 'BPMNLabelStyle_1'
+                }
+            }
         }
         waypoints.forEach(point => {
             newBpmnEdge['di:waypoint'].push({
@@ -370,10 +377,27 @@ class BpmnModel {
                 }
             })
         });
-        this.parsed_model_xml['bpmn2:definitions']['bpmn2:process'][0]['bpmn2:sequenceFlow'].push(newBpmnSequence)
+        const process = this.parsed_model_xml['bpmn2:definitions']['bpmn2:process'][0]
+        process['bpmn2:sequenceFlow'].push(newBpmnSequence)
         this.parsed_model_xml['bpmn2:definitions']['bpmndi:BPMNDiagram'][0]['bpmndi:BPMNPlane'][0]['bpmndi:BPMNEdge'].push(newBpmnEdge)
+        this._findElementById(process, sourceNode)['bpmn2:outgoing'].push(id)
+        this._findElementById(process, targetNode)['bpmn2:incoming'].push(id)
         this.overlay_constructs.set(id, new BpmnConnection(id, '', sourceNode, targetNode, waypoints))
         this.overlay_constructs.get(id).status = 'HIGHLIGHTED'
+        return id
+    }
+
+    _findElementById(process, id) {
+        for (const [_, elements] of Object.entries(process)) {
+            if (!Array.isArray(elements)) continue;
+            const found = elements.find(el => el.$?.id === id);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    _getNextSequenceId() {
+        var id = 'SequenceFlow_' + this.parsed_model_xml['bpmn2:definitions']['bpmn2:process'][0]['bpmn2:sequenceFlow'].length + 1   
         return id
     }
 
