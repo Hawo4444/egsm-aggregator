@@ -1,6 +1,8 @@
 var EventEmitter = require('events')
 var xml2js = require('xml2js');
 const { EgsmStage } = require('./egsm-stage');
+const fs = require('fs');
+const debugLog = fs.createWriteStream('conditions.log', { flags: 'w' });
 
 /**
  * Class repsesenting an eGSM model
@@ -39,14 +41,13 @@ class EgsmModel {
     recordStageCondition(stageId, value) {
         var stage = this.stages.get(stageId)
         var parentId = stage.parent
-        if (!this.stages.has(parentId)) {
+        if (!this.stages.has(parentId))
             return
-        }
         var parent = this.stages.get(parentId)
-        if (parent.type !== 'INCLUSIVE' && parent.type !== 'EXCLUSIVE' && parent.type !== 'ITERATION') {
+        if (parent.type !== 'INCLUSIVE' && parent.type !== 'EXCLUSIVE' && parent.type !== 'ITERATION')
             return
-        }
         stage.recordCondition(value)
+        debugLog.write(new Date().toISOString() + ' - ' + stage.type + ': ' + stage.id + ', condition: ' + value + '\n');
     }
 
     /**

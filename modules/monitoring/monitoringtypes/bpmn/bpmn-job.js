@@ -29,22 +29,27 @@ class BpmnJob extends Job {
   onProcessEvent(messageObj) {
     console.log(messageObj)
     var process = messageObj.process_type + '/' + messageObj.process_id + '__' + messageObj.process_perspective
-    if (this.monitoredprocesses.has(process)) {
-      if (this.perspectives.has(messageObj.process_perspective)) {
-        var perspective = this.perspectives.get(messageObj.process_perspective)
-        var egsm = perspective.egsm_model
-        if (egsm.stages.has(messageObj.stage_name)) {
-          if(messageObj.state == 'opened') {
-            messageObj.state = 'open'
-          }
-          egsm.updateStage(messageObj.stage_name, messageObj.status.toUpperCase(), messageObj.state.toUpperCase(), messageObj.compliance.toUpperCase())
-          //This would trigger checking process flow guards and if they change, we record history
-          var deviations = perspective.analyze()
-          this.triggerCompleteUpdateEvent()
-          console.log(deviations)
-        }
+    if (!this.monitoredprocesses.has(process))
+      return
+    if (!this.perspectives.has(messageObj.process_perspective))
+      return
+    var perspective = this.perspectives.get(messageObj.process_perspective)
+    var egsm = perspective.egsm_model
+    var isConditionEvent = messageObj.hasOwnProperty('condition')
+    if (isConditionEvent) {
+      egsm.recordStageCondition(messageObj.stage_name, messageObj.condition)
+    } else {
+      if (!egsm.stages.has(messageObj.stage_name))
+        return
+      if (messageObj.state == 'opened') {
+        messageObj.state = 'open'
       }
+      egsm.updateStage(messageObj.stage_name, messageObj.status.toUpperCase(), messageObj.state.toUpperCase(), messageObj.compliance.toUpperCase())
+      var deviations = perspective.analyze()
+      this.triggerCompleteUpdateEvent()
+      console.log(deviations)
     }
+
     /*var errors = Validator.validateProcessStage(messageObj.stage)
     if (errors.length > 0) {
         console.debug(`Faulty stage of process [${messageObj.processtype}/${messageObj.instanceid}]__${messageObj.perspective} detected: ${JSON.stringify(errors)}`)

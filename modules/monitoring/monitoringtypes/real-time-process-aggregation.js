@@ -16,6 +16,8 @@ class RealTimeProcessAggregation extends Job {
      * @param {Object} messageObj Received process event object 
      */
     onProcessEvent(messageObj) {
+        if (messageObj.hasOwnProperty('condition'))
+            return
         console.log(messageObj)
         if (!this.engines.has(messageObj.process_id)) {
             this.engines.set(messageObj.process_id, new Map())
@@ -29,7 +31,7 @@ class RealTimeProcessAggregation extends Job {
      */
     analyze() {
         this.data.clear()
-        for (const [key, instance] of this.engines) {
+        for (const [_, instance] of this.engines) {
 
             for (const [key2, perspective] of instance) {
                 if (!this.data.has(key2)) {
