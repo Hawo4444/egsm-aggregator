@@ -182,24 +182,44 @@ class BpmnModel {
      * @returns Returns a BpmnGateway object of the converging pair of 'divergingGateway'
      */
     findConvergingGateway(divergingGateway) {
-        var counter = 1
-        var currentNode = divergingGateway
-        while (counter != 0) {
-            var outputs = currentNode.outputs
-            if (outputs.length == 0) {
-                currentNode = divergingGateway.id
-                break
-            }
-            var currentNode = this.constructs.get(this.constructs.get(outputs[0]).target)
-            if (currentNode.constructor.name == 'BpmnGateway' && currentNode.subtype == 'Diverging') {
-                counter++
-            }
-            else if (currentNode.constructor.name == 'BpmnGateway' && currentNode.subtype == 'Converging') {
-                counter--
+    //Use BFS to find the matching converging gateway
+    const queue = [...divergingGateway.outputs.map(output => this.constructs.get(output))]
+    const visited = new Set([divergingGateway.id])
+    let nestingLevel = 1
+    while (queue.length > 0 && nestingLevel > 0) {
+        const current = queue.shift()
+        if (!current) 
+            continue
+        const targetId = current.target
+        if (!targetId || visited.has(targetId)) 
+            continue
+        visited.add(targetId);
+        const targetNode = this.constructs.get(targetId)
+        if (!targetNode) 
+            continue
+        //Check if this is a gateway
+        if (targetNode.constructor.name === 'BpmnGateway') {
+            if (targetNode.subtype === 'Diverging') {
+                nestingLevel++
+            } else if (targetNode.subtype === 'Converging') {
+                nestingLevel--
+                if (nestingLevel === 0) {
+                    return targetNode
+                }
             }
         }
-        return currentNode
+        //Add all outputs to the queue for exploration
+        if (targetNode.outputs && targetNode.outputs.length > 0) {
+            for (const outputId of targetNode.outputs) {
+                const outputFlow = this.constructs.get(outputId)
+                if (outputFlow && !visited.has(outputFlow.id)) {
+                    queue.push(outputFlow)
+                }
+            }
+        }
     }
+    return null
+}
 
     /**
      * Updates the status and state of a list of BpmnTask-s
