@@ -545,7 +545,8 @@ class ProcessPerspective {
                 //Skipped iteration - unopened iteration and parent loop has skipped OR closed iteration parent loop has should be closed
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
                     if (currentStage.getLatestChange(parentPair?.close).state === 'OPEN') {
-                        deviations.push(new IncompleteDeviation(currentStage.id, parentPairIndex, iterationIndex))
+                        //TODO: To get the iteration index in front end, pass parentPairIndex as iterationIndex - there is probably a better solution to this
+                        deviations.push(new IncompleteDeviation(currentStage.id, parentPairIndex, parentPairIndex))
                         //this.egsm_model.stages.get(currentStage.id).propagateCondition('SHOULD_BE_CLOSED')
                     }
                     /*if (open.size > 0) {

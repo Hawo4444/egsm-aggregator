@@ -251,7 +251,7 @@ class BpmnModel {
                 if (this.constructs.has(firstSkippedBlock)) {
                     var block = this.constructs.get(firstSkippedBlock)
                     if (block.constructor.name !== 'BpmnConnection') {
-                        block.addDeviation('SKIPPED', { iterationIndex: deviation.iterationIndex })
+                        block.addDeviation('SKIPPED', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                     }
                 }
                 if (!deviation.block_b || deviation.block_b === 'NONE')
@@ -300,18 +300,21 @@ class BpmnModel {
             case 'OVERLAP':
                 overlapLog.write(new Date().toISOString() + ' - ' + this.perspective_name + ': OVERLAP: ' + deviation.block_a + ' - ' + deviation.block_b + '\n')
                 if (this.constructs.has(deviation.block_b)) {
-                    this.constructs.get(deviation.block_b).addDeviation('OVERLAP', { over: deviation.block_a, iterationIndex: deviation.iterationIndex })
+                    this.constructs.get(deviation.block_b).addDeviation('OVERLAP', { over: deviation.block_a, iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
             //IncompleteDeviation regards always one eGSM stage only. If we are able to find the
             //matching BPMN task or block then we can add a Flag, otherwise neglect it
             //TODO: consider how this works with parallel, inclusive, exclusive, iteration
             case 'INCOMPLETE':
-                const construct = this.constructs.get(deviation.block_a)
+                var constructId = deviation.block_a.endsWith('_iteration')
+                    ? deviation.block_a.slice(0, -'_iteration'.length)
+                    : deviation.block_a;
+                const construct = this.constructs.get(constructId)
                 if (construct instanceof BpmnBlock) {
                     console.log('INCOMPLETE: ' + deviation.block_a)
-                    console.log('Construct:', JSON.stringify(this.constructs.get(deviation.block_a), null, 2))
-                    this.constructs.get(deviation.block_a).addDeviation('INCOMPLETE', { iterationIndex: deviation.iterationIndex })
+                    console.log('Construct:', JSON.stringify(construct, null, 2))
+                    construct.addDeviation('INCOMPLETE', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
             //TODO: consider branches
@@ -319,25 +322,25 @@ class BpmnModel {
                 if (this.constructs.has(deviation.block_a)) {
                     console.log('MULTI_EXECUTION: ' + deviation.block_a)
                     console.log('Construct:', JSON.stringify(this.constructs.get(deviation.block_a), null, 2))
-                    this.constructs.get(deviation.block_a).addDeviation('MULTI_EXECUTION', { count: deviation.executionCount, iterationIndex: deviation.iterationIndex })
+                    this.constructs.get(deviation.block_a).addDeviation('MULTI_EXECUTION', { count: deviation.executionCount, iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
             //TODO: this should now be easy, just draw an edge from origin to skipped
             case 'INCORRECT_EXECUTION':
                 /*deviation.block_a.forEach(element => {
                     if (this.constructs.has(element)) {
-                        this.constructs.get(element).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex })
+                        this.constructs.get(element).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                     }
                 });*/
                 if (this.constructs.has(deviation.block_b)) {//TODO
                     try {
-                        this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex })
+                        this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                     } catch (e) { }
                 }
                 break;
             case 'INCORRECT_BRANCH':
                 if (this.constructs.has(deviation.block_a)) {
-                    this.constructs.get(deviation.block_a).addDeviation('INCORRECT_BRANCH', { iterationIndex: deviation.iterationIndex })
+                    this.constructs.get(deviation.block_a).addDeviation('INCORRECT_BRANCH', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
         }
