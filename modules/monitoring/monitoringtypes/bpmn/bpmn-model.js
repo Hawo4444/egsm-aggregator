@@ -251,7 +251,7 @@ class BpmnModel {
                 if (this.constructs.has(firstSkippedBlock)) {
                     var block = this.constructs.get(firstSkippedBlock)
                     if (block.constructor.name !== 'BpmnConnection') {
-                        block.addDeviation('SKIPPED')
+                        block.addDeviation('SKIPPED', { iterationIndex: deviation.iterationIndex })
                     }
                 }
                 if (!deviation.block_b || deviation.block_b === 'NONE')
@@ -300,7 +300,7 @@ class BpmnModel {
             case 'OVERLAP':
                 overlapLog.write(new Date().toISOString() + ' - ' + this.perspective_name + ': OVERLAP: ' + deviation.block_a + ' - ' + deviation.block_b + '\n')
                 if (this.constructs.has(deviation.block_b)) {
-                    this.constructs.get(deviation.block_b).addDeviation('OVERLAP', { over: deviation.block_a })
+                    this.constructs.get(deviation.block_b).addDeviation('OVERLAP', { over: deviation.block_a, iterationIndex: deviation.iterationIndex })
                 }
                 break;
             //IncompleteDeviation regards always one eGSM stage only. If we are able to find the
@@ -311,33 +311,33 @@ class BpmnModel {
                 if (construct instanceof BpmnBlock) {
                     console.log('INCOMPLETE: ' + deviation.block_a)
                     console.log('Construct:', JSON.stringify(this.constructs.get(deviation.block_a), null, 2))
-                    this.constructs.get(deviation.block_a).addDeviation('INCOMPLETE')
+                    this.constructs.get(deviation.block_a).addDeviation('INCOMPLETE', { iterationIndex: deviation.iterationIndex })
                 }
                 break;
-            //TODO: consider branches, add count
+            //TODO: consider branches
             case 'MULTI_EXECUTION':
                 if (this.constructs.has(deviation.block_a)) {
                     console.log('MULTI_EXECUTION: ' + deviation.block_a)
                     console.log('Construct:', JSON.stringify(this.constructs.get(deviation.block_a), null, 2))
-                    this.constructs.get(deviation.block_a).addDeviation('MULTI_EXECUTION', { count: deviation.executionCount })
+                    this.constructs.get(deviation.block_a).addDeviation('MULTI_EXECUTION', { count: deviation.executionCount, iterationIndex: deviation.iterationIndex })
                 }
                 break;
             //TODO: this should now be easy, just draw an edge from origin to skipped
             case 'INCORRECT_EXECUTION':
                 /*deviation.block_a.forEach(element => {
                     if (this.constructs.has(element)) {
-                        this.constructs.get(element).addDeviation('INCORRECT_EXECUTION')
+                        this.constructs.get(element).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex })
                     }
                 });*/
                 if (this.constructs.has(deviation.block_b)) {//TODO
                     try {
-                        this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION')
+                        this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex })
                     } catch (e) { }
                 }
                 break;
             case 'INCORRECT_BRANCH':
                 if (this.constructs.has(deviation.block_a)) {
-                    this.constructs.get(deviation.block_a).addDeviation('INCORRECT_BRANCH')
+                    this.constructs.get(deviation.block_a).addDeviation('INCORRECT_BRANCH', { iterationIndex: deviation.iterationIndex })
                 }
                 break;
         }

@@ -153,7 +153,7 @@ class ProcessPerspective {
      */
     _analyzeRecursive(stage, discoveredDeviations, closestParentIteration = null) {
         var currentStage = this.egsm_model.stages.get(stage)
-        if (currentStage.type === 'ITERATION' || currentStage.type === 'LOOP') {
+        if (currentStage.type === 'ITERATION') {
             closestParentIteration = currentStage
         }
         var children = currentStage.children
