@@ -791,7 +791,7 @@ test('PARALLEL - One stage not executed at all - parent should be closed', async
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new SkipDeviation(['ch1'], 'NA', 0, -1)]
+    new SkipDeviation(['ch1'], 'NONE', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -953,8 +953,8 @@ test('PARALLEL - Multiple stages not executed - parent should be closed', async 
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new SkipDeviation(['ch1'], 'NA', 0, -1),
-    new SkipDeviation(['ch2'], 'NA', 0, -1)]
+    new SkipDeviation(['ch1'], 'NONE', 0, -1),
+    new SkipDeviation(['ch2'], 'NONE', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -1390,7 +1390,7 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should be clo
   var expected = [
     new IncompleteDeviation('ch2', 0, -1), 
     new IncorrectBranchDeviation('ch2', 0, -1), 
-    new SkipDeviation(['ch1'], 'NA', 0, -1)
+    new SkipDeviation(['ch1'], 'NONE', 0, -1)
   ]
   var data = pers1.analyze()
   console.log(data)
@@ -2008,7 +2008,7 @@ test('ITERATION - Skipping A1', async () => {
   ch2.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new SkipDeviation(['ch1'], 'NA', 0, -1),
+    new SkipDeviation(['ch1'], 'NONE', 0, -1),
   ]
   var data = pers1.analyze()
   console.log(data)
@@ -2067,7 +2067,7 @@ test('ITERATION - 3 iterations, A1 in the first last', async () => {
   ch2.update(undefined, 'CLOSED', undefined)
 
   var expected = [
-    new SkipDeviation(['ch1'], 'NA', 2, -1)
+    new SkipDeviation(['ch1'], 'NONE', 2, -1)
   ]
   var data = pers1.analyze()
   console.log(data)
@@ -2296,8 +2296,8 @@ test('SEQUENCE&PARALLEL - Missing parallel stage execution', async () => {
 
   var expected = [
     new SkipDeviation(['parallel'], 'ch4', 0, -1),
-    new SkipDeviation(['ch2'], 'NA', 0, -1),
-    new SkipDeviation(['ch3'], 'NA', 0, -1)
+    new SkipDeviation(['ch2'], 'NONE', 0, -1),
+    new SkipDeviation(['ch3'], 'NONE', 0, -1)
   ]
   var data = pers1.analyze()
   console.log(data)
@@ -2555,7 +2555,7 @@ test('SEQUENCE&EXCLUSIVE - Not executing the desired branch and executing a non-
     new OverlapDeviation(['ch4'], 'exclusive', 0, -1),
     new IncompleteDeviation('exclusive', 0, -1), 
     new IncorrectBranchDeviation('ch3', 0, -1), 
-    new SkipDeviation(['ch2'], 'NA', 0, -1)]
+    new SkipDeviation(['ch2'], 'NONE', 0, -1)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)

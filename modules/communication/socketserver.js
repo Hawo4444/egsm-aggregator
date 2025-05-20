@@ -101,7 +101,7 @@ function subscribeJobEvents(session, jobid) {
         return { result: "subscribed" }
     }
     else {
-        console.warn(`Job with ID [${jobid}] does not found`)
+        console.warn(`Job with ID [${jobid}] not found`)
         return {result: "error"}
     }
 }

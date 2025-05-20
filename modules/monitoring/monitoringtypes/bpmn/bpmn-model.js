@@ -182,44 +182,44 @@ class BpmnModel {
      * @returns Returns a BpmnGateway object of the converging pair of 'divergingGateway'
      */
     findConvergingGateway(divergingGateway) {
-    //Use BFS to find the matching converging gateway
-    const queue = [...divergingGateway.outputs.map(output => this.constructs.get(output))]
-    const visited = new Set([divergingGateway.id])
-    let nestingLevel = 1
-    while (queue.length > 0 && nestingLevel > 0) {
-        const current = queue.shift()
-        if (!current) 
-            continue
-        const targetId = current.target
-        if (!targetId || visited.has(targetId)) 
-            continue
-        visited.add(targetId);
-        const targetNode = this.constructs.get(targetId)
-        if (!targetNode) 
-            continue
-        //Check if this is a gateway
-        if (targetNode.constructor.name === 'BpmnGateway') {
-            if (targetNode.subtype === 'Diverging') {
-                nestingLevel++
-            } else if (targetNode.subtype === 'Converging') {
-                nestingLevel--
-                if (nestingLevel === 0) {
-                    return targetNode
+        //Use BFS to find the matching converging gateway
+        const queue = [...divergingGateway.outputs.map(output => this.constructs.get(output))]
+        const visited = new Set([divergingGateway.id])
+        let nestingLevel = 1
+        while (queue.length > 0 && nestingLevel > 0) {
+            const current = queue.shift()
+            if (!current)
+                continue
+            const targetId = current.target
+            if (!targetId || visited.has(targetId))
+                continue
+            visited.add(targetId);
+            const targetNode = this.constructs.get(targetId)
+            if (!targetNode)
+                continue
+            //Check if this is a gateway
+            if (targetNode.constructor.name === 'BpmnGateway') {
+                if (targetNode.subtype === 'Diverging') {
+                    nestingLevel++
+                } else if (targetNode.subtype === 'Converging') {
+                    nestingLevel--
+                    if (nestingLevel === 0) {
+                        return targetNode
+                    }
+                }
+            }
+            //Add all outputs to the queue for exploration
+            if (targetNode.outputs && targetNode.outputs.length > 0) {
+                for (const outputId of targetNode.outputs) {
+                    const outputFlow = this.constructs.get(outputId)
+                    if (outputFlow && !visited.has(outputFlow.id)) {
+                        queue.push(outputFlow)
+                    }
                 }
             }
         }
-        //Add all outputs to the queue for exploration
-        if (targetNode.outputs && targetNode.outputs.length > 0) {
-            for (const outputId of targetNode.outputs) {
-                const outputFlow = this.constructs.get(outputId)
-                if (outputFlow && !visited.has(outputFlow.id)) {
-                    queue.push(outputFlow)
-                }
-            }
-        }
+        return null
     }
-    return null
-}
 
     /**
      * Updates the status and state of a list of BpmnTask-s
@@ -244,14 +244,18 @@ class BpmnModel {
             //OutOfOrder one
             //TODO: consider the case where last few stages of a sequence are skipped
             case 'SKIPPED':
-                var firstSkippedBlock = deviation.block_a[0]
+                var firstSkippedBlock = deviation.block_a[0].endsWith('_iteration')
+                    ? deviation.block_a[0].slice(0, -'_iteration'.length)
+                    : deviation.block_a[0];
                 var lastSkippedBlock = deviation.block_a.at(-1)
-                if (this.constructs.has(deviation.block_a[0])) {
-                    this.constructs.get(deviation.block_a[0]).addDeviation('SKIPPED')
+                if (this.constructs.has(firstSkippedBlock)) {
+                    var block = this.constructs.get(firstSkippedBlock)
+                    if (block.constructor.name !== 'BpmnConnection') {
+                        block.addDeviation('SKIPPED')
+                    }
                 }
-                if (this.constructs.has(deviation.block_b)) {
-                    //this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION')
-                }
+                if (!deviation.block_b || deviation.block_b === 'NONE')
+                    break;
                 //It means that the first and last blocks which has been skipped exist in the BPMN diagram as well
                 if (this.constructs.has(firstSkippedBlock) && this.constructs.has(lastSkippedBlock)) {
                     var inputEdge = this.constructs.get(firstSkippedBlock).inputs?.[0] || 'NONE'
@@ -270,26 +274,24 @@ class BpmnModel {
                     if (outputEdge != 'NONE') {
                         destination = this.constructs.get(outputEdge).target || 'NONE'
                     }
-                    //IF any of source of destination is 'NONE', then it requires further consideration, since BPMN specification
+                    //IF any of source or destination is 'NONE', then it requires further consideration, since BPMN specification
                     //requires to provide the source and destination of the edge
                     if (source != 'NONE' && destination != 'NONE') {
                         var waypoints = [this.constructs.get(inputEdge).waypoints[0], new Point(this.constructs.get(inputEdge).waypoints[0].x, 450),
                         new Point(this.constructs.get(outputEdge).waypoints.at(-1).x, 450),
                         this.constructs.get(outputEdge).waypoints.at(-1)]
-                        var edgeId = this._getNextSequenceId()
-                        this._addSkippingEdgeToModel("SequenceFlow_14", waypoints, source, destination)
+                        this._addSkippingEdgeToModel(this._getNextSequenceId(), waypoints, source, destination)
                     }
                     //StartEvent has been skipped, we need to add a virtual start event to draw the skipping edge
                     if (source == 'NONE' && destination != 'NONE') {
                         var idShape = UUID.v4()
-                        var idEdge = UUID.v4()
                         var eventPosition = new Point(80, 450)
                         var eventWidth = 36
                         var eventHeight = 36
                         var waypoints = [new Point(eventPosition.x + eventWidth / 2, eventPosition.y + eventHeight / 2), new Point(eventPosition.x + eventWidth / 2, 450 + eventHeight / 2),
                         new Point(this.constructs.get(outputEdge).waypoints.at(-1).x, 450 + eventHeight / 2),
                         this.constructs.get(outputEdge).waypoints.at(-1)]
-                        var edgeId = this._addSkippingEdgeToModel(idEdge, waypoints, idShape, destination)
+                        var edgeId = this._addSkippingEdgeToModel(this._getNextSequenceId(), waypoints, idShape, destination)
                         this._addIllegalEntryToModel(idShape, eventPosition, eventWidth, eventHeight, edgeId)
                     }
                 }
@@ -327,8 +329,10 @@ class BpmnModel {
                         this.constructs.get(element).addDeviation('INCORRECT_EXECUTION')
                     }
                 });*/
-                if (this.constructs.has(deviation.block_b)) {
-                    this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION')
+                if (this.constructs.has(deviation.block_b)) {//TODO
+                    try {
+                        this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION')
+                    } catch (e) { }
                 }
                 break;
             case 'INCORRECT_BRANCH':
@@ -417,8 +421,23 @@ class BpmnModel {
     }
 
     _getNextSequenceId() {
-        var id = 'SequenceFlow_' + this.parsed_model_xml['bpmn2:definitions']['bpmn2:process'][0]['bpmn2:sequenceFlow'].length + 1   
-        return id
+        const sequenceFlows = this.parsed_model_xml['bpmn2:definitions']['bpmn2:process'][0]['bpmn2:sequenceFlow'];
+        if (!sequenceFlows || sequenceFlows.length === 0) {
+            return 'SequenceFlow_1';
+        }
+        let maxNumber = 0;
+        sequenceFlows.forEach(flow => {
+            const id = flow.$.id || flow.id;
+            if (id && id.startsWith('SequenceFlow_')) {
+                const numberPart = id.replace('SequenceFlow_', '');
+                const num = parseInt(numberPart, 10);
+                if (!isNaN(num) && num > maxNumber) {
+                    maxNumber = num;
+                }
+            }
+        });
+
+        return 'SequenceFlow_' + (maxNumber + 1);
     }
 
     /**

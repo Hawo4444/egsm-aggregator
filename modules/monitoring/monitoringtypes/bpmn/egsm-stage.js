@@ -77,7 +77,7 @@ class EgsmStage {
             return this.history[this.history.length - 1]
         }
         for (let i = this.history.length - 1; i >= 0; i--) {
-            if (this.history[i].timestamp < before) {
+            if (this.history[i].timestamp <= before) {
                 return this.history[i]
             }
         }
