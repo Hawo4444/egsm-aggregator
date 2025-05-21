@@ -1968,7 +1968,7 @@ test('ITERATION - Incorrect execution sequence - 1 stage', async () => {
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectExecutionSequenceDeviation('ch1', 'ch2', 0, -1)]
+  var expected = [new IncorrectExecutionSequenceDeviation('parent', 'NONE', 0, 0)]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2189,7 +2189,7 @@ test('ITERATION - Incomplete execution of one stage - parent should be closed', 
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new IncompleteDeviation('parent', 0, -1),
+    new IncompleteDeviation('parent', 0, 0),
     new IncompleteDeviation('ch2', 0, -1)
   ]
   var data = pers1.analyze()
@@ -2231,7 +2231,7 @@ test('ITERATION - Incomplete execution of 2 stages - parent should be executed',
   stage1.propagateCondition('SHOULD_BE_CLOSED')
 
   var expected = [
-    new IncompleteDeviation('parent', 0, -1),
+    new IncompleteDeviation('parent', 0, 0),
     new OverlapDeviation(['ch2'], 'ch1', 0, -1),
     new IncompleteDeviation('ch1', 0, -1),
     new IncompleteDeviation('ch2', 0, -1)

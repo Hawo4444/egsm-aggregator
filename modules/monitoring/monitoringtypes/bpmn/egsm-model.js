@@ -75,6 +75,22 @@ class EgsmModel {
         if (children[Object.keys(children)[0]]?.['$']?.id?.includes('iteration')) {
             this.stages.get(stageId).type = 'LOOP'
         }
+        // Reorder children so child[0] is forward and child[1] is backward branch
+        if (parent !== 'NONE' && this.stages.get(parent).type === 'LOOP') {
+            var childKeys = Object.keys(children);
+            if (childKeys.length === 2) {
+                var swapNeeded = false;
+                var secondChildId = children[childKeys[1]]['$'].id;
+                var firstChildGuard = children[childKeys[0]]?.['ca:ProcessFlowGuard']?.[0]?.['$']?.expression;
+                if (firstChildGuard && firstChildGuard.includes(secondChildId))
+                    swapNeeded = true;
+                if (swapNeeded) {
+                    var temp = children[childKeys[0]];
+                    children[childKeys[0]] = children[childKeys[1]];
+                    children[childKeys[1]] = temp;
+                }
+            }
+        }
         for (var key in children) {
             this.stages.get(stage['$'].id).addChild(children[key]['$'].id)
             this._parseStageRecursive(children[key], stage['$'].id)
@@ -85,7 +101,7 @@ class EgsmModel {
      * Instantiate Stages and build Process Tree based on the provided XML eGSM model definition in the constructor
      */
     _buildModel() {
-        if(this.model_xml == undefined){
+        if (this.model_xml == undefined) {
             return
         }
         var context = this
@@ -109,11 +125,11 @@ class EgsmModel {
         var result = []
         for (var [key, entry] of this.stages) {
             if (entry.type == 'ACTIVITY') {
-            result.push({
-                name: entry.id,
-                status: entry.status,
-                state: entry.state
-            })
+                result.push({
+                    name: entry.id,
+                    status: entry.status,
+                    state: entry.state
+                })
             }
         }
         return result

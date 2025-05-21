@@ -185,7 +185,7 @@ class ProcessPerspective {
             debugLog.write('*is in iteration, count ' + closestParentIteration.getOpenClosePairs().length + '\n')
             for (var iterationPair of closestParentIteration.getOpenClosePairs()) { //Loop through iterations
                 var parentPairIndex = 0
-                var filteredCurrentStageOpenClosePairs = currentStageOpenClosePairs.filter(pair => pair.open > iterationPair.open && 
+                var filteredCurrentStageOpenClosePairs = currentStageOpenClosePairs.filter(pair => pair.open > iterationPair.open &&
                     (iterationPair.close === null || pair.open < iterationPair.close))
                 if (filteredCurrentStageOpenClosePairs.length > 0) {
                     debugLog.write('*stage opened in current iteration \n')
@@ -262,6 +262,7 @@ class ProcessPerspective {
         //Evaluation procedure depends on the type of the parent Stage
         switch (currentStage.type) {
             case 'SEQUENCE':
+                this._propagateShouldBeClosed(currentStage, parentPair)
                 //-OVERLAP and INCOMPLETE deviations-
                 var processFlow = this._getProcessFlow(children, parentPair)
                 for (let i = 0; i < processFlow.length; i++) {
@@ -534,9 +535,9 @@ class ProcessPerspective {
                 //In this case there is no deviation detection, but we need to propagate the conditions to the child, 
                 //which is always an ITERATION block
                 if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    open.forEach(openElement => {
+                    currentStage.children.forEach(child => {
                         //deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex))
-                        this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
+                        this.egsm_model.stages.get(child).propagateCondition('SHOULD_BE_CLOSED')
                     });
                 }
                 break;
@@ -707,6 +708,35 @@ class ProcessPerspective {
                 });*/
 
                 break;
+        }
+    }
+
+    _propagateShouldBeClosed(stage, parentPair) {
+        const childStages = (stage.children || []).map(id => this.egsm_model.stages.get(id));
+        if (childStages.length === 0) return;
+
+        let lastStage = null;
+        const predecessorIds = new Set(childStages.map(s => s.direct_predecessor).filter(id => id));
+        for (const childStage of childStages) {
+            if (!predecessorIds.has(childStage.id)) {
+                lastStage = childStage;
+                break;
+            }
+        }
+
+        let currentStage = lastStage;
+        let foundOpen = false;
+
+        while (currentStage) {
+            const latestChange = currentStage.getLatestChange(parentPair?.close);
+            if (!foundOpen && latestChange && latestChange.state !== 'UNOPENED') {
+                foundOpen = true;
+            } else if (foundOpen) {
+                currentStage.propagateCondition('SHOULD_BE_CLOSED');
+            }
+
+            if (!currentStage.direct_predecessor) break;
+            currentStage = this.egsm_model.stages.get(currentStage.direct_predecessor);
         }
     }
 
