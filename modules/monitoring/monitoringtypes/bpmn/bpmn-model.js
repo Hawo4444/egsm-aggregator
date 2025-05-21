@@ -325,17 +325,13 @@ class BpmnModel {
                     this.constructs.get(deviation.block_a).addDeviation('MULTI_EXECUTION', { count: deviation.executionCount, iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
-            //TODO: this should now be easy, just draw an edge from origin to skipped
             case 'INCORRECT_EXECUTION':
-                /*deviation.block_a.forEach(element => {
-                    if (this.constructs.has(element)) {
-                        this.constructs.get(element).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
-                    }
-                });*/
-                if (this.constructs.has(deviation.block_b)) {//TODO
-                    try {
-                        this.constructs.get(deviation.block_b).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
-                    } catch (e) { }
+                //TODO: could also add edges based on the sequence, but needs more consideration
+                var constructId = deviation.block_a.endsWith('_iteration')
+                    ? deviation.block_a.slice(0, -'_iteration'.length)
+                    : deviation.block_a;
+                if (this.constructs.has(constructId)) {
+                    this.constructs.get(constructId).addDeviation('INCORRECT_EXECUTION', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
             case 'INCORRECT_BRANCH':

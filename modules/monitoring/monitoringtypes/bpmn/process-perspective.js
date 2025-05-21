@@ -666,7 +666,12 @@ class ProcessPerspective {
                     }
                     if (skippedFound) {
                         if (openOutOfOrderFound) {
-                            deviations.push(new IncorrectExecutionSequenceDeviation(childId, previousStage, parentPairIndex, iterationIndex))
+                            //TODO: passing parentPairIndex as iterationIndex to get the correct iteration index in frontend, could probably be done better
+                            deviations.push(new IncorrectExecutionSequenceDeviation(currentStage.id, 'NONE', parentPairIndex, parentPairIndex))
+                            /* //If we want to do more with this, like add arrows, go with this version but needs to be handled in frontend potentially
+                            //Also use this.egsm_model.stages.get(childId).children[0] and this.egsm_model.stages.get(previousStage).children[0],
+                            //if there is only one child as branches are wrapped in sequence blocks, needs futher consideration if branch has multiple children
+                            deviations.push(new IncorrectExecutionSequenceDeviation(childId, previousStage, parentPairIndex, parentPairIndex))*/
                         } /*else {      
                             //If there is any SKIPPED stage among children it suggests, that at least one child activity has been skipped
                             //furthermore, at least one OoO child stage must exist                     
