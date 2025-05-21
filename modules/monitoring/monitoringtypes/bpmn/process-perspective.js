@@ -558,13 +558,14 @@ class ProcessPerspective {
                     }*/
 
                     //if (currentStage.state === 'UNOPENED' ) {//TODO, check how this behaves .getLatestChange(parentPair?.close + 0.01? or similar), otherwise =< in method
-                    if (currentStage.parentPair?.close === null && currentStage.state === 'UNOPENED') { //now checking current state, so depends if new iteration can start from unopened 
+                    if (parentPair?.close === null && currentStage.state === 'UNOPENED') { //now checking current state, so depends if new iteration can start from unopened 
                         deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, iterationIndex))
                     } else if (currentStage.getLatestChange(parentPair?.close).state === 'CLOSED') {
                         //For last ITERATION to complete correctly, a2 should be unopened and a1 closed
                         if (this.egsm_model.stages.get(currentStage.children[1]).getLatestChange(parentPair?.close).state !== 'UNOPENED') {
                             if (parentPairIndex === currentStage.getOpenClosePairs().length - 1) {
-                                deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, iterationIndex)) //TODO: here we add skip deviation for the entire iteration, I would add last iteration+1 as index 
+                                //TODO: To get the iteration index in front end, pass parentPairIndex as iterationIndex - there is probably a better solution to this
+                                deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, parentPairIndex + 1))
                                 //this.egsm_model.stages.get(currentStage.id).propagateCondition('SHOULD_BE_CLOSED')
                             }
                         }
