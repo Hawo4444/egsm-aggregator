@@ -128,6 +128,7 @@ class ProcessPerspective {
      */
     analyze() {
         //Process tree traversal to find deviations
+        this.egsm_model.stages.forEach(stage => stage.cleanPropagations())
         var deviations = []
         for (var key in this.egsm_model.model_roots) {
             deviations.concat(this._analyzeStage(this.egsm_model.model_roots[key], deviations))
