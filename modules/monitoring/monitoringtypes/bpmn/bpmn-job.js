@@ -45,6 +45,7 @@ class BpmnJob extends Job {
         messageObj.state = 'open'
       }
       egsm.updateStage(messageObj.stage_name, messageObj.status.toUpperCase(), messageObj.state.toUpperCase(), messageObj.compliance.toUpperCase())
+      perspective.egsm_model.stages.forEach(stage => stage.cleanPropagations())
       var deviations = perspective.analyze()
       this.triggerCompleteUpdateEvent()
       console.log(deviations)
