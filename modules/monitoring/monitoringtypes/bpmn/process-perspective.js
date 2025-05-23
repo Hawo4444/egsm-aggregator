@@ -119,26 +119,32 @@ class ProcessPerspective {
     }
 
     /**
-     * Performs a full analysis on the eGSM model and detect deviations
-     * The function will also reset the BPMN model (to remove old deviations), synchronize its states with the current eGSM ones
-     * and apply the discovered deviations on it, so we can be sure that after the termination of this function the BPMN will be synchronized with the eGSM model 
-     * @returns Returns by the discovered deviations as a list of Deviation instances
-     */
+ * Performs a full analysis on the eGSM model and detect deviations
+ * The function will also reset the BPMN model (to remove old deviations), synchronize its states with the current eGSM ones
+ * and apply the discovered deviations on it, so we can be sure that after the termination of this function the BPMN will be synchronized with the eGSM model 
+ * @returns Returns by the discovered deviations as a list of Deviation instances
+ */
     analyze() {
-        //Process tree traversal to find deviations
-        var deviations = []
-        for (var key in this.egsm_model.model_roots) {
-            deviations.concat(this._analyzeStage(this.egsm_model.model_roots[key], deviations))
-            deviations = this._analyzeRecursive(this.egsm_model.model_roots[key], deviations)
+        // Process tree traversal to find deviations
+        const deviations = [];
+
+        // Single loop with proper array concatenation
+        for (const key in this.egsm_model.model_roots) {
+            const rootStage = this.egsm_model.model_roots[key];
+            this._analyzeStage(rootStage, deviations);
+            this._analyzeRecursive(rootStage, deviations);
         }
-        //Update Status and State of BPMN Activities
-        this.bpmn_model.resetModel()
-        this.bpmn_model.applyEgsmStageArray(this.egsm_model.getStageInfoArray())
-        //Apply deviations on the BPMN model
+
+        // Update Status and State of BPMN Activities
+        this.bpmn_model.resetModel();
+        this.bpmn_model.applyEgsmStageArray(this.egsm_model.getStageInfoArray());
+
+        // Apply deviations on the BPMN model
         deviations.forEach(element => {
-            this.bpmn_model.applyDeviation(element)
+            this.bpmn_model.applyDeviation(element);
         });
-        return deviations
+
+        return deviations;
     }
 
     /**
@@ -146,21 +152,20 @@ class ProcessPerspective {
      * Should be called only internally
      * @param {String} stage ID of the current stage
      * @param {Deviation[]} discoveredDeviations Array containing the already discovered Deviations
+     * @param {EgsmStage} closestParentIteration Iteration stage that is the closest parent of the current stage, if one exists
      * @returns An array of Deviation instances, containing the content of 'discoveredDeviations' argument and the freshly discovered Deviations
      */
     _analyzeRecursive(stage, discoveredDeviations, closestParentIteration = null) {
-        var currentStage = this.egsm_model.stages.get(stage)
-        if (currentStage.type === 'ITERATION') {
-            closestParentIteration = currentStage
-        }
-        var children = currentStage.children
-        var deviations = discoveredDeviations
-        for (var child in children) {
-            deviations = this._analyzeStage(children[child], deviations, closestParentIteration)
-            this._analyzeRecursive(children[child], deviations, closestParentIteration)
-        }
+        const currentStage = this.egsm_model.stages.get(stage);
+        const updatedParentIteration = currentStage.type === 'ITERATION' ? currentStage : closestParentIteration;
 
-        return deviations
+        // Process all children in a single loop
+        currentStage.children.forEach(child => {
+            this._analyzeStage(child, discoveredDeviations, updatedParentIteration);
+            this._analyzeRecursive(child, discoveredDeviations, updatedParentIteration);
+        });
+
+        return discoveredDeviations;
     }
 
     /**
@@ -172,469 +177,515 @@ class ProcessPerspective {
      * @returns An array of Deviation instances, containing the content of 'discoveredDeviations' argument and the freshly discovered Deviations
      */
     _analyzeStage(stage, discoveredDeviations, closestParentIteration) {
-        console.log('analyze stage:' + stage)
-        var deviations = discoveredDeviations
-        var currentStage = this.egsm_model.stages.get(stage)
-        var currentStageOpenClosePairs = currentStage.getOpenClosePairs()
+        console.log('analyze stage:' + stage);
+        const currentStage = this.egsm_model.stages.get(stage);
+        const currentStageOpenClosePairs = currentStage.getOpenClosePairs();
+
+        let pairsToAnalyze = [];
 
         if (closestParentIteration && closestParentIteration.getOpenClosePairs().length > 0) {
-            //Loop through iterations
-            for (var iterationPair of closestParentIteration.getOpenClosePairs()) {
-                var parentPairIndex = 0
-                var filteredCurrentStageOpenClosePairs = currentStageOpenClosePairs.filter(pair => pair.open > iterationPair.open &&
-                    (iterationPair.close === null || pair.open < iterationPair.close))
-                if (filteredCurrentStageOpenClosePairs.length > 0) {
-                    for (var parentPair of filteredCurrentStageOpenClosePairs) {
-                        this._findDeviations(deviations, stage, currentStage, iterationPair, parentPair, parentPairIndex)
-                        parentPairIndex++
-                    }
+            // Build pairs to analyze based on iteration context
+            for (const iterationPair of closestParentIteration.getOpenClosePairs()) {
+                const filteredPairs = currentStageOpenClosePairs.filter(pair =>
+                    pair.open > iterationPair.open &&
+                    (iterationPair.close === null || pair.open < iterationPair.close)
+                );
+
+                if (filteredPairs.length > 0) {
+                    filteredPairs.forEach((parentPair, index) => {
+                        pairsToAnalyze.push({ iterationPair, parentPair, parentPairIndex: index });
+                    });
                 } else {
-                    this._findDeviations(deviations, stage, currentStage, iterationPair, null, 0)
+                    pairsToAnalyze.push({ iterationPair, parentPair: null, parentPairIndex: 0 });
                 }
             }
         } else {
             if (currentStageOpenClosePairs.length > 0) {
-                var parentPairIndex = 0
-                for (var parentPair of currentStage.getOpenClosePairs()) {
-                    this._findDeviations(deviations, stage, currentStage, null, parentPair, parentPairIndex)
-                    parentPairIndex++
-                }
+                currentStageOpenClosePairs.forEach((parentPair, index) => {
+                    pairsToAnalyze.push({ iterationPair: null, parentPair, parentPairIndex: index });
+                });
             } else {
-                this._findDeviations(deviations, stage, currentStage, null, null, 0)
+                pairsToAnalyze.push({ iterationPair: null, parentPair: null, parentPairIndex: 0 });
             }
         }
-        return deviations
+
+        // Process all pairs
+        pairsToAnalyze.forEach(({ iterationPair, parentPair, parentPairIndex }) => {
+            this._findDeviations(discoveredDeviations, stage, currentStage, iterationPair, parentPair, parentPairIndex);
+        });
+
+        return discoveredDeviations;
     }
 
     _findDeviations(deviations, stage, currentStage, iterationPair, parentPair, parentPairIndex) {
-        var iterationIndex = iterationPair ? iterationPair.index : -1
-        var open = new Set()
-        var unopened = new Set()
-        var skipped = new Set()
-        var outOfOrder = new Set()
-        var children = this.egsm_model.stages.get(stage).children
-        for (var key in children) {
-            if (this.egsm_model.stages.get(children[key]).getLatestChange(parentPair?.close).state === 'OPEN') {
-                open.add(children[key])
-            }
-            else if (this.egsm_model.stages.get(children[key]).getLatestChange(parentPair?.close).state === 'UNOPENED') {
-                unopened.add(children[key])
-            }
-            if (this.egsm_model.stages.get(children[key]).getLatestChange(parentPair?.close).compliance === 'SKIPPED') {
-                skipped.add(children[key])
-            }
-            else if (this.egsm_model.stages.get(children[key]).getLatestChange(parentPair?.close).compliance === 'OUTOFORDER') {
-                outOfOrder.add(children[key])
-            }
-        }
+        const iterationIndex = iterationPair ? iterationPair.index : -1;
 
-        //The children have to be evaluated
-        //Evaluation procedure depends on the type of the parent Stage
+        // Categorize children in a single pass
+        const childCategories = this._categorizeChildren(stage, parentPair);
+        const { open, unopened, skipped, outOfOrder } = childCategories;
+
+        // The children have to be evaluated
+        // Evaluation procedure depends on the type of the parent Stage
         switch (currentStage.type) {
             case 'SEQUENCE':
-                this._propagateShouldBeClosed(currentStage, parentPair)
-
-                //-OVERLAP and INCOMPLETE deviations-
-                var processFlow = this._getProcessFlow(children, parentPair)
-                for (let i = 0; i < processFlow.length; i++) {
-                    let item = processFlow[i];
-                    if (item.state === "OPEN") {
-                        let overlapped = []
-                        let foundClosing = false
-                        let closingTime = null
-                        let openingTime = item.timestamp
-                        for (let j = i + 1; j < processFlow.length; j++) {
-                            let nextItem = processFlow[j]
-                            if (nextItem.state === "OPEN") {
-                                overlapped.push(nextItem.id);
-                            } else if (nextItem.state === "CLOSED" && item.id === nextItem.id) {
-                                foundClosing = true
-                                closingTime = nextItem.timestamp
-                                break
-                            }
-                        }
-                        if (overlapped.length > 0) {
-                            overlapped = this.extractActivitiesFromOverlapped(overlapped, openingTime, closingTime)
-                            //If the overlap is caused by non-basic stage, we could propagate some condition to find the specific cause
-                            deviations.push(new OverlapDeviation(overlapped, item.id, parentPairIndex, iterationIndex))
-                            this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED')
-                            if (!foundClosing) {
-                                deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
-                            }
-                        } else if (!foundClosing) {
-                            var stage = this.egsm_model.stages.get(item.id)
-                            if ((stage?.parent && this.egsm_model.stages.get(stage.parent).propagated_conditions.has('SHOULD_BE_CLOSED'))) {
-                                deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
-                                this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED')
-                            }
-                        }
-                    }
-                }
-
-                //-MULTIEXECUTION deviation-
-                outOfOrder.forEach(outOfOrderElement => {
-                    var count = processFlow.filter(item => item.id === outOfOrderElement && item.state === "OPEN").length;
-                    if (count > 1) {
-                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex))
-                    }
-                });
-
-                //-INCORRECTEXECUTIONSEQUENCE and SKIP deviation-
-                var skippings = new Map() //OoO stage -> skipped sequence (skipped stages later extended by Unopened Stages before the Skipped one)
-                currentStage.children.forEach(childId => {
-                    var skippedFound = false
-                    var openOutOfOrderFound = false
-                    var previousStage = null
-                    var firstFound = false //TODO: could consider getting rid of this depending on how the engine resets the inner stages
-                    for (let i = 0; i < processFlow.length; i++) {
-                        if (processFlow[i].id === childId) {
-                            if (!firstFound) {
-                                firstFound = true
-                                if (processFlow[i].state === 'UNOPENED' && processFlow[i].compliance === 'ONTIME') {
-                                    continue;
-                                }
-                            }
-                            if (!skippedFound) {
-                                if (processFlow[i].compliance !== 'SKIPPED') {
-                                    break
-                                } else {
-                                    skippedFound = true
-                                }
-                            } else {
-                                if (processFlow[i].compliance === 'OUTOFORDER') {
-                                    openOutOfOrderFound = true
-                                    for (let j = i - 1; j >= 0; j--) {
-                                        if (processFlow[j].state === 'OPEN') {
-                                            previousStage = processFlow[j].id
-                                            break
-                                        }
-                                    }
-                                    break
-                                }
-                            }
-                        }
-                    }
-                    if (skippedFound) {
-                        if (openOutOfOrderFound) {
-                            deviations.push(new IncorrectExecutionSequenceDeviation(childId, previousStage, parentPairIndex, iterationIndex))
-                        } else {
-                            //If there is any SKIPPED stage among children it suggests, that at least one child activity has been skipped
-                            //furthermore, at least one OoO child stage must exist                     
-                            outOfOrder.forEach(outOfOrderElement => {
-                                if (this.egsm_model.stages.get(outOfOrderElement).direct_predecessor == childId) {
-                                    skippings.set(outOfOrderElement, [childId])
-                                    //skipped.delete(skippedElement)
-                                    unopened.delete(childId)
-                                    this.egsm_model.stages.get(childId).propagateCondition('SHOULD_BE_CLOSED')
-                                }
-                            });
-                            //Extending skipped sequences by trying to include UNOPENED stages
-                            var finalized = false
-                            while (!finalized) {
-                                finalized = true
-                                unopened.forEach(unopenedElement => {
-                                    for (var [_, entry] of skippings.entries()) {
-                                        if (this.egsm_model.stages.get(entry[0]).direct_predecessor === unopenedElement) {
-                                            entry.unshift(unopenedElement)
-                                            finalized = false
-                                            unopened.delete(unopenedElement)
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                    }
-                });
-
-                //If the Sequence stage is supposed to be closed, then every UNOPENED stage was skipped
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    unopened.forEach(unopenedElement => {
-                        skippings.set(null, [unopenedElement])
-                        this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                }
-
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    var lastElement = [...unopened].find(candidate => {
-                        return ![...unopened].some(other =>
-                            this.egsm_model.stages.get(other).direct_predecessor === candidate
-                        );
-                    });
-
-                    if (lastElement) {
-                        var sequence = [];
-                        var current = lastElement;
-                        while (current) {
-                            sequence.push(current);
-                            this.egsm_model.stages.get(current).propagateCondition('SHOULD_BE_CLOSED');
-                            unopened.delete(current);
-
-                            var predecessorId = this.egsm_model.stages.get(current).direct_predecessor;
-                            if (unopened.has(predecessorId)) {
-                                current = predecessorId;
-                            } else {
-                                current = null;
-                            }
-                        }
-                        skippings.set(null, sequence);
-                    }
-                }
-
-                //Creating SkipDeviation instances
-                for (var [key, entry] of skippings) {
-                    deviations.push(new SkipDeviation(entry, key, parentPairIndex, iterationIndex))
-                }
+                this._handleSequenceDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, childCategories);
                 break;
             case 'PARALLEL':
-                //If the parent stage is should be closed then it means that at least one of the children processes
-                //has not been executed completely or at all, so we can create IncompleteExecution and SkipDeviation instances 
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    unopened.forEach(unopenedElement => {
-                        deviations.push(new SkipDeviation([unopenedElement], 'NONE', parentPairIndex, iterationIndex))
-                        this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                    open.forEach(openElement => {
-                        deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex))
-                        this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                }
-
-                outOfOrder.forEach(outOfOrderElement => {
-                    var count = 0
-                    this.egsm_model.stages.get(outOfOrderElement).getHistory().forEach(e => {
-                        if (e.state === 'OPEN') {
-                            count++
-                        }
-                    });
-                    if (count > 1) {
-                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex))
-                    }
-                });
+                this._handleParallelDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, childCategories);
                 break;
             case 'EXCLUSIVE':
-                //-INCOMPLETE deviation-
-                //If the parent should be already closed, then the opened children suggesting IncompleteDeviations 
-                //even if they are not on the correct branch
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    open.forEach(openElement => {
-                        deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex))
-                        this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                }
-                
-                //-MULTIEXECUTION and INCORRECTBRANCH deviations-               
-                outOfOrder.forEach(outOfOrderElement => {
-                    var stage = this.egsm_model.stages.get(outOfOrderElement)
-                    var count = 0
-                    var firstOpening = null
-                    stage.getHistory().filter(e => e.timestamp > parentPair.open && e.timestamp < parentPair.close).forEach(e => {
-                        if (e.state === 'OPEN') {
-                            count++
-                            if (!firstOpening) {
-                                firstOpening = e
-                            }
-                        }
-                    });
-                    if (count > 1) {
-                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex))
-                        if (firstOpening?.status === 'OUTOFORDER') {
-                            var condition = stage.getConditionAt(firstOpening.timestamp);
-                            if (condition?.value === false) {
-                                deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
-                            }
-                        }
-                    } else {
-                        var condition = stage.getConditionAt(stage.getLatestOpening().timestamp)
-                        if (condition === false) {
-                            deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex))
-                        }
-                    }
-                });
-
-                //Finally for each skipped branches a SkipDeviation instance is created
-                //TODO: confirm that the engine marks branches as skipped
-                skipped.forEach(skippedElement => {
-                    deviations.push(new SkipDeviation([skippedElement], 'NONE', parentPairIndex, iterationIndex))
-                    this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED')
-                });
+                this._handleExclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, childCategories);
                 break;
             case 'INCLUSIVE':
-                //-INCOMPLETE deviation-
-                //If the parent stage is supposed to be closed than we can create an IncompleteExecution deviation instance
-                //for each opened activity
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    open.forEach(openElement => {
-                        deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex))
-                        this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                }
-
-                //-MULTIEXECUTION and INCORRECTBRANCH deviations-
-                outOfOrder.forEach(outOfOrderElement => {
-                    var history = this.egsm_model.stages.get(outOfOrderElement).getHistory().filter(e => e.timestamp > parentPair.open && e.timestamp < parentPair.close)
-                    var count = 0
-                    var firstOpening = null
-                    history.forEach(e => {
-                        if (e.state === 'OPEN') {
-                            count++
-                            if (!firstOpening) {
-                                firstOpening = e
-                            }
-                        }
-                    });
-                    if (count > 1) {
-                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex))
-                        if (firstOpening?.status === 'OUTOFORDER') {
-                            deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
-                        }
-                    } else {
-                        deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex))
-                    }
-                });
-
-                //-SKIP deviation-
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    unopened.forEach(unopenedElement => {
-                        var condition = this.egsm_model.stages.get(unopenedElement).getLatestCondition(parentPair.close)
-                        if (condition?.value === true) {
-                            deviations.push(new SkipDeviation([unopenedElement], 'NONE', parentPairIndex, iterationIndex))
-                            this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED')
-                        }
-                    });
-                }
+                this._handleInclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, childCategories);
                 break;
             case 'LOOP':
-                //In this case there is no deviation detection, but we need to propagate the conditions to the child, 
-                //which is always an ITERATION block
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    currentStage.children.forEach(child => {
-                        this.egsm_model.stages.get(child).propagateCondition('SHOULD_BE_CLOSED')
-                    });
-                }
+                this._handleLoopDeviations(currentStage);
                 break;
             case 'ITERATION':
-                //-ICNOMPLETE iteration- open iteration and has should be closed
-                //-SKIPPED iteration- unopened iteration and parent loop has skipped OR closed iteration parent loop has should be closed
-                if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-                    if (currentStage.getLatestChange(parentPair?.close).state === 'OPEN') {
-                        //TODO: To get the iteration index in front end, pass parentPairIndex as iterationIndex - there is probably a better solution to this
-                        deviations.push(new IncompleteDeviation(currentStage.id, parentPairIndex, parentPairIndex))
-                    }
-
-                    if (parentPair?.close === null && currentStage.state === 'UNOPENED') {
-                        deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, iterationIndex))
-                    } else if (currentStage.getLatestChange(parentPair?.close).state === 'CLOSED') {
-                        //For last ITERATION to complete correctly, a2 should be unopened and a1 closed
-                        if (this.egsm_model.stages.get(currentStage.children[1]).getLatestChange(parentPair?.close).state !== 'UNOPENED') {
-                            if (parentPairIndex === currentStage.getOpenClosePairs().length - 1) {
-                                //TODO: To get the iteration index in front end, pass parentPairIndex as iterationIndex - there is probably a better solution to this
-                                deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, parentPairIndex + 1))
-                            }
-                        }
-                    }
-                }
-
-                //- OVERLAP deviation-
-                var processFlow = this._getProcessFlow(children, parentPair)
-                for (let i = 0; i < processFlow.length; i++) {
-                    var item = processFlow[i];
-                    if (item.state === "OPEN") {
-                        var overlapped = []
-                        var foundClosing = false
-                        var closingTime = null
-                        var openingTime = item.timestamp
-                        for (let j = i + 1; j < processFlow.length; j++) {
-                            var nextItem = processFlow[j]
-                            if (nextItem.state === "OPEN") {
-                                overlapped.push(nextItem.id);
-                            } else if (nextItem.state === "CLOSED" && item.id === nextItem.id) {
-                                foundClosing = true
-                                closingTime = nextItem.timestamp //===null ? parentPair?.close : nextItem.timestamp
-                                break
-                            }
-                        }
-                        if (overlapped.length > 0) {
-                            overlapped = this.extractActivitiesFromOverlapped(overlapped, openingTime, closingTime)
-                            deviations.push(new OverlapDeviation(overlapped, item.id, parentPairIndex, iterationIndex))
-                            this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED') //TODO: this may depend on the order!
-                            if (!foundClosing) {
-                                deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
-                            }
-                        } else if (!foundClosing) {
-                            var stage = this.egsm_model.stages.get(item.id)
-                            if ((stage?.parent && this.egsm_model.stages.get(stage.parent).propagated_conditions.has('SHOULD_BE_CLOSED'))) {
-                                deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex))
-                                stage.propagateCondition('SHOULD_BE_CLOSED')
-                            }
-                        }
-                    }
-                }
-
-                //-SKIPPED branch- a1 will be skipped at the end of the iteration
-                //-INCORRECT branch- only when we have a1 skipped and then a2, although a1 may still open in which case incorrect order as well
-                skipped.forEach(skippedElement => {
-                    deviations.push(new SkipDeviation([skippedElement], 'NONE', parentPairIndex, iterationIndex))
-                    this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED')
-                    //only a1 can be skipped, so if we have an OoO element, we know a2 has opened hence incorrect branch
-                    if (outOfOrder.length > 0) {
-                        deviations.push(new IncorrectBranchDeviation(outOfOrder[0], parentPairIndex, iterationIndex))
-                    }
-                });
-
-                //-MULTIEXECUTION deviation- within the iteration, count openings
-                outOfOrder.forEach(outOfOrderElement => {
-                    var count = processFlow.filter(item => item.id === outOfOrderElement && item.state === "OPEN").length;
-                    if (count > 1) {
-                        deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex))
-                    }
-                });
-
-                //-INCORRECTEXECUTIONSEQUENCE deviation-
-                //Incorrect order - same as in sequence, except now it needs to be a1 that is skipped first and then out of order
-                // a2 will then also be OoO without a chance of ever being ontime
-                var skippings = new Map() //OoO stage -> skipped sequence
-                currentStage.children.forEach(childId => {
-                    var skippedFound = false
-                    var openOutOfOrderFound = false
-                    var previousStage = null
-                    var firstFound = false //TODO: could consider getting rid of this depending on how the engine resets the inner stages
-                    for (let i = 0; i < processFlow.length; i++) {
-                        if (processFlow[i].id === childId) {
-                            if (!firstFound) {
-                                firstFound = true
-                                if (processFlow[i].state === 'UNOPENED' && processFlow[i].compliance === 'ONTIME') {
-                                    continue;
-                                }
-                            }
-                            if (!skippedFound) {
-                                if (processFlow[i].compliance !== 'SKIPPED') {
-                                    break
-                                } else {
-                                    skippedFound = true
-                                }
-                            } else {
-                                if (processFlow[i].compliance === 'OUTOFORDER') {
-                                    openOutOfOrderFound = true
-                                    for (let j = i - 1; j >= 0; j--) {
-                                        if (processFlow[j].state === 'OPEN') {
-                                            previousStage = processFlow[j].id
-                                            break
-                                        }
-                                    }
-                                    break
-                                }
-                            }
-                        }
-                    }
-                    if (skippedFound) {
-                        if (openOutOfOrderFound) {
-                            //TODO: passing parentPairIndex as iterationIndex to get the correct iteration index in frontend, could probably be done better
-                            deviations.push(new IncorrectExecutionSequenceDeviation(currentStage.id, 'NONE', parentPairIndex, parentPairIndex))
-                        }
-                    }
-                });
+                this._handleIterationDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, childCategories);
                 break;
         }
+    }
+
+    /**
+     * Categorize children stages in a single pass
+     */
+    _categorizeChildren(stage, parentPair) {
+        const open = new Set();
+        const unopened = new Set();
+        const skipped = new Set();
+        const outOfOrder = new Set();
+        const children = this.egsm_model.stages.get(stage).children;
+
+        children.forEach(childId => {
+            const childStage = this.egsm_model.stages.get(childId);
+            const latestChange = childStage.getLatestChange(parentPair?.close);
+
+            // Categorize by state
+            if (latestChange.state === 'OPEN') {
+                open.add(childId);
+            } else if (latestChange.state === 'UNOPENED') {
+                unopened.add(childId);
+            }
+
+            // Categorize by compliance
+            if (latestChange.compliance === 'SKIPPED') {
+                skipped.add(childId);
+            } else if (latestChange.compliance === 'OUTOFORDER') {
+                outOfOrder.add(childId);
+            }
+        });
+
+        return { open, unopened, skipped, outOfOrder };
+    }
+
+    _handleSequenceDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, skipped, outOfOrder }) {
+        this._propagateShouldBeClosed(currentStage, parentPair);
+
+        // OVERLAP and INCOMPLETE deviations
+        this._processOverlapAndIncomplete(deviations, currentStage.children, parentPair, parentPairIndex, iterationIndex);
+
+        // MULTIEXECUTION deviation
+        this._processMultiExecution(deviations, currentStage, parentPair, outOfOrder, parentPairIndex, iterationIndex);
+
+        // INCORRECTEXECUTIONSEQUENCE and SKIP deviation
+        const skippings = this._processSequenceSkippings(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, unopened, outOfOrder);
+
+        // Handle remaining unopened stages if parent should be closed
+        this._handleRemainingUnopened(currentStage, unopened, skippings);
+
+        // Create SkipDeviation instances
+        for (const [key, entry] of skippings) {
+            deviations.push(new SkipDeviation(entry, key, parentPairIndex, iterationIndex));
+        }
+    }
+
+    _handleParallelDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, outOfOrder }) {
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            // Process unopened and open stages together
+            unopened.forEach(unopenedElement => {
+                deviations.push(new SkipDeviation([unopenedElement], 'NONE', parentPairIndex, iterationIndex));
+                this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED');
+            });
+
+            open.forEach(openElement => {
+                deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex));
+                this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED');
+            });
+        }
+
+        this._processMultiExecutionFromHistory(deviations, outOfOrder, parentPairIndex, iterationIndex);
+    }
+
+    _handleExclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, skipped, outOfOrder }) {
+        // INCOMPLETE deviation
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            open.forEach(openElement => {
+                deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex));
+                this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED');
+            });
+        }
+
+        // MULTIEXECUTION and INCORRECTBRANCH deviations
+        this._processExclusiveOutOfOrder(deviations, outOfOrder, parentPair, parentPairIndex, iterationIndex);
+
+        // SKIP deviations
+        skipped.forEach(skippedElement => {
+            deviations.push(new SkipDeviation([skippedElement], 'NONE', parentPairIndex, iterationIndex));
+            this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED');
+        });
+    }
+
+    _handleInclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, outOfOrder }) {
+        // INCOMPLETE deviation
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            open.forEach(openElement => {
+                deviations.push(new IncompleteDeviation(openElement, parentPairIndex, iterationIndex));
+                this.egsm_model.stages.get(openElement).propagateCondition('SHOULD_BE_CLOSED');
+            });
+        }
+
+        // MULTIEXECUTION and INCORRECTBRANCH deviations
+        this._processInclusiveOutOfOrder(deviations, outOfOrder, parentPair, parentPairIndex, iterationIndex);
+
+        // SKIP deviation
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            unopened.forEach(unopenedElement => {
+                const condition = this.egsm_model.stages.get(unopenedElement).getLatestCondition(parentPair.close);
+                if (condition?.value === true) {
+                    deviations.push(new SkipDeviation([unopenedElement], 'NONE', parentPairIndex, iterationIndex));
+                    this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED');
+                }
+            });
+        }
+    }
+
+    _handleLoopDeviations(currentStage) {
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            currentStage.children.forEach(child => {
+                this.egsm_model.stages.get(child).propagateCondition('SHOULD_BE_CLOSED');
+            });
+        }
+    }
+
+    _handleIterationDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { skipped, outOfOrder }) {
+        this._processIterationCompletionDeviations(deviations, currentStage, parentPair, parentPairIndex);
+
+        // OVERLAP deviation
+        this._processOverlapAndIncomplete(deviations, currentStage.children, parentPair, parentPairIndex, iterationIndex);
+
+        // SKIPPED and INCORRECT branch deviations
+        this._processIterationSkippedBranches(deviations, skipped, parentPairIndex, iterationIndex);
+
+        // MULTIEXECUTION deviation
+        this._processMultiExecution(deviations, currentStage, parentPair, outOfOrder, parentPairIndex, iterationIndex);
+
+        // INCORRECTEXECUTIONSEQUENCE deviation
+        this._processIterationIncorrectSequence(deviations, currentStage, parentPair, parentPairIndex);
+    }
+
+    // Helper methods for processing specific deviation types
+    _processOverlapAndIncomplete(deviations, children, parentPair, parentPairIndex, iterationIndex) {
+        const processFlow = this._getProcessFlow(children, parentPair);
+
+        for (let i = 0; i < processFlow.length; i++) {
+            const item = processFlow[i];
+            if (item.state === "OPEN") {
+                const { overlapped, foundClosing, closingTime, openingTime } = this._findOverlappedItems(processFlow, i, item);
+
+                if (overlapped.length > 0) {
+                    const extractedActivities = this.extractActivitiesFromOverlapped(overlapped, openingTime, closingTime);
+                    deviations.push(new OverlapDeviation(extractedActivities, item.id, parentPairIndex, iterationIndex));
+                    this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED');
+
+                    if (!foundClosing) {
+                        deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex));
+                    }
+                } else if (!foundClosing) {
+                    const stage = this.egsm_model.stages.get(item.id);
+                    if (stage?.parent && this.egsm_model.stages.get(stage.parent).propagated_conditions.has('SHOULD_BE_CLOSED')) {
+                        deviations.push(new IncompleteDeviation(item.id, parentPairIndex, iterationIndex));
+                        this.egsm_model.stages.get(item.id).propagateCondition('SHOULD_BE_CLOSED');
+                    }
+                }
+            }
+        }
+    }
+
+    _findOverlappedItems(processFlow, startIndex, item) {
+        const overlapped = [];
+        let foundClosing = false;
+        let closingTime = null;
+        const openingTime = item.timestamp;
+
+        for (let j = startIndex + 1; j < processFlow.length; j++) {
+            const nextItem = processFlow[j];
+            if (nextItem.state === "OPEN") {
+                // Store both ID and timestamp to preserve chronological order
+                overlapped.push({
+                    id: nextItem.id,
+                    timestamp: nextItem.timestamp
+                });
+            } else if (nextItem.state === "CLOSED" && item.id === nextItem.id) {
+                foundClosing = true;
+                closingTime = nextItem.timestamp;
+                break;
+            }
+        }
+
+        return { overlapped, foundClosing, closingTime, openingTime };
+    }
+
+    // For sequence and iteration stages - uses processFlow
+    _processMultiExecution(deviations, currentStage, parentPair, outOfOrder, parentPairIndex, iterationIndex) {
+        const processFlow = this._getProcessFlow(currentStage.children, parentPair);
+
+        outOfOrder.forEach(outOfOrderElement => {
+            const count = processFlow.filter(item => item.id === outOfOrderElement && item.state === "OPEN").length;
+            if (count > 1) {
+                deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex));
+            }
+        });
+    }
+
+    _processMultiExecutionFromHistory(deviations, outOfOrder, parentPairIndex, iterationIndex) {
+        outOfOrder.forEach(outOfOrderElement => {
+            const count = this.egsm_model.stages.get(outOfOrderElement)
+                .getHistory()
+                .filter(e => e.state === 'OPEN').length;
+
+            if (count > 1) {
+                deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex));
+            }
+        });
+    }
+
+    _processExclusiveOutOfOrder(deviations, outOfOrder, parentPair, parentPairIndex, iterationIndex) {
+        outOfOrder.forEach(outOfOrderElement => {
+            const stage = this.egsm_model.stages.get(outOfOrderElement);
+            let count = 0;
+            let firstOpening = null;
+
+            stage.getHistory().filter(e => e.timestamp > parentPair.open && e.timestamp < parentPair.close).forEach(e => {
+                if (e.state === 'OPEN') {
+                    count++;
+                    if (!firstOpening) {
+                        firstOpening = e;
+                    }
+                }
+            });
+
+            if (count > 1) {
+                deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex));
+                if (firstOpening?.status === 'OUTOFORDER') {
+                    const condition = stage.getConditionAt(firstOpening.timestamp);
+                    if (condition?.value === false) {
+                        deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
+                    }
+                }
+            } else {
+                const condition = stage.getConditionAt(stage.getLatestOpening().timestamp);
+                if (condition === false) {
+                    deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
+                }
+            }
+        });
+    }
+
+    _processInclusiveOutOfOrder(deviations, outOfOrder, parentPair, parentPairIndex, iterationIndex) {
+        outOfOrder.forEach(outOfOrderElement => {
+            const history = this.egsm_model.stages.get(outOfOrderElement).getHistory().filter(e => e.timestamp > parentPair.open && e.timestamp < parentPair.close);
+            let count = 0;
+            let firstOpening = null;
+
+            history.forEach(e => {
+                if (e.state === 'OPEN') {
+                    count++;
+                    if (!firstOpening) {
+                        firstOpening = e;
+                    }
+                }
+            });
+
+            if (count > 1) {
+                deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex));
+                if (firstOpening?.status === 'OUTOFORDER') {
+                    deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
+                }
+            } else {
+                deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
+            }
+        });
+    }
+
+    _processSequenceSkippings(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, unopened, outOfOrder) {
+        const skippings = new Map();
+        const processFlow = this._getProcessFlow(currentStage.children, parentPair);
+
+        currentStage.children.forEach(childId => {
+            let skippedFound = false;
+            let openOutOfOrderFound = false;
+            let previousStage = null;
+            let firstFound = false;
+
+            for (let i = 0; i < processFlow.length; i++) {
+                if (processFlow[i].id === childId) {
+                    if (!firstFound) {
+                        firstFound = true;
+                        if (processFlow[i].state === 'UNOPENED' && processFlow[i].compliance === 'ONTIME') {
+                            continue;
+                        }
+                    }
+                    if (!skippedFound) {
+                        if (processFlow[i].compliance !== 'SKIPPED') {
+                            break;
+                        } else {
+                            skippedFound = true;
+                        }
+                    } else {
+                        if (processFlow[i].compliance === 'OUTOFORDER') {
+                            openOutOfOrderFound = true;
+                            for (let j = i - 1; j >= 0; j--) {
+                                if (processFlow[j].state === 'OPEN') {
+                                    previousStage = processFlow[j].id;
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (skippedFound) {
+                if (openOutOfOrderFound) {
+                    deviations.push(new IncorrectExecutionSequenceDeviation(childId, previousStage, parentPairIndex, iterationIndex));
+                } else {
+                    outOfOrder.forEach(outOfOrderElement => {
+                        if (this.egsm_model.stages.get(outOfOrderElement).direct_predecessor == childId) {
+                            skippings.set(outOfOrderElement, [childId]);
+                            unopened.delete(childId);
+                            this.egsm_model.stages.get(childId).propagateCondition('SHOULD_BE_CLOSED');
+                        }
+                    });
+
+                    // Extending skipped sequences by trying to include UNOPENED stages
+                    let finalized = false;
+                    while (!finalized) {
+                        finalized = true;
+                        unopened.forEach(unopenedElement => {
+                            for (const [_, entry] of skippings.entries()) {
+                                if (this.egsm_model.stages.get(entry[0]).direct_predecessor === unopenedElement) {
+                                    entry.unshift(unopenedElement);
+                                    finalized = false;
+                                    unopened.delete(unopenedElement);
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
+        return skippings;
+    }
+
+    _handleRemainingUnopened(currentStage, unopened, skippings) {
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            unopened.forEach(unopenedElement => {
+                skippings.set(null, [unopenedElement]);
+                this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED');
+            });
+        }
+
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            const lastElement = [...unopened].find(candidate => {
+                return ![...unopened].some(other =>
+                    this.egsm_model.stages.get(other).direct_predecessor === candidate
+                );
+            });
+
+            if (lastElement) {
+                const sequence = [];
+                let current = lastElement;
+                while (current) {
+                    sequence.push(current);
+                    this.egsm_model.stages.get(current).propagateCondition('SHOULD_BE_CLOSED');
+                    unopened.delete(current);
+
+                    const predecessorId = this.egsm_model.stages.get(current).direct_predecessor;
+                    if (unopened.has(predecessorId)) {
+                        current = predecessorId;
+                    } else {
+                        current = null;
+                    }
+                }
+                skippings.set(null, sequence);
+            }
+        }
+    }
+
+    _processIterationCompletionDeviations(deviations, currentStage, parentPair, parentPairIndex) {
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            if (currentStage.getLatestChange(parentPair?.close).state === 'OPEN') {
+                deviations.push(new IncompleteDeviation(currentStage.id, parentPairIndex, parentPairIndex));
+            }
+
+            if (parentPair?.close === null && currentStage.state === 'UNOPENED') {
+                deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, iterationIndex));
+            } else if (currentStage.getLatestChange(parentPair?.close).state === 'CLOSED') {
+                if (this.egsm_model.stages.get(currentStage.children[1]).getLatestChange(parentPair?.close).state !== 'UNOPENED') {
+                    if (parentPairIndex === currentStage.getOpenClosePairs().length - 1) {
+                        deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, parentPairIndex + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    _processIterationSkippedBranches(deviations, skipped, parentPairIndex, iterationIndex) {
+        skipped.forEach(skippedElement => {
+            deviations.push(new SkipDeviation([skippedElement], 'NONE', parentPairIndex, iterationIndex));
+            this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED');
+        });
+    }
+
+    _processIterationIncorrectSequence(deviations, currentStage, parentPair, parentPairIndex) {
+        const processFlow = this._getProcessFlow(currentStage.children, parentPair);
+
+        currentStage.children.forEach(childId => {
+            let skippedFound = false;
+            let openOutOfOrderFound = false;
+            let firstFound = false;
+
+            for (let i = 0; i < processFlow.length; i++) {
+                if (processFlow[i].id === childId) {
+                    if (!firstFound) {
+                        firstFound = true;
+                        if (processFlow[i].state === 'UNOPENED' && processFlow[i].compliance === 'ONTIME') {
+                            continue;
+                        }
+                    }
+                    if (!skippedFound) {
+                        if (processFlow[i].compliance !== 'SKIPPED') {
+                            break;
+                        } else {
+                            skippedFound = true;
+                        }
+                    } else {
+                        if (processFlow[i].compliance === 'OUTOFORDER') {
+                            openOutOfOrderFound = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (skippedFound && openOutOfOrderFound) {
+                deviations.push(new IncorrectExecutionSequenceDeviation(currentStage.id, 'NONE', parentPairIndex, parentPairIndex));
+            }
+        });
     }
 
     _propagateShouldBeClosed(stage, parentPair) {
@@ -711,27 +762,68 @@ class ProcessPerspective {
         return processFlow;
     }
 
-    extractActivitiesFromOverlapped(overlapped, openingTime, closingTime) {
+    extractActivitiesFromOverlapped(overlappedItems, openingTime, closingTime) {
         const activities = [];
-        for (const item of overlapped) {
-            this.collectActivities(item, activities, openingTime, closingTime, true);
+
+        // overlappedItems now contains objects with {id, timestamp} instead of just IDs
+        for (const overlappedItem of overlappedItems) {
+            this.collectActivitiesWithTiming(overlappedItem, activities, openingTime, closingTime);
         }
-        return activities;
+
+        // Sort activities by their opening time
+        activities.sort((a, b) => {
+            if (a.timestamp === null) return 1;
+            if (b.timestamp === null) return -1;
+            return a.timestamp - b.timestamp;
+        });
+
+        // Return just the activity IDs in time order
+        return activities.map(activity => activity.id);
     }
 
-    collectActivities(item, activities, openingTime, closingTime, isTopLevel = false) {
-        const stage = this.egsm_model.stages.get(item);
-        if (!stage)
-            return;
+    collectActivitiesWithTiming(overlappedItem, activities, openingTime, closingTime) {
+        const stage = this.egsm_model.stages.get(overlappedItem.id);
+        if (!stage) return;
 
         if (stage.type === 'ACTIVITY' || stage.type === 'EXCEPTION') {
-            if (isTopLevel || stage.getOpeningTimeBetween(openingTime, closingTime) !== null) {
-                activities.push(item);
-            }
+            // If it's directly in overlapped, we already know it opened during overlap
+            activities.push({
+                id: overlappedItem.id,
+                timestamp: overlappedItem.timestamp
+            });
         } else {
+            // For composite stages, recurse into children
+            // to find activities that opened during the overlap period
             if (stage.children && stage.children.length > 0) {
                 for (const child of stage.children) {
-                    this.collectActivities(child, activities, openingTime, closingTime, false);
+                    this.collectActivitiesFromChildren(child, activities, openingTime, closingTime);
+                }
+            }
+        }
+    }
+
+    collectActivitiesFromChildren(stageId, activities, openingTime, closingTime) {
+        const stage = this.egsm_model.stages.get(stageId);
+        if (!stage) return;
+
+        if (stage.type === 'ACTIVITY' || stage.type === 'EXCEPTION') {
+            // For children, we need to check if they actually opened during overlap
+            const history = stage.getHistory();
+            for (const change of history) {
+                if (change.state === 'OPEN' &&
+                    change.timestamp >= openingTime &&
+                    (closingTime === null || change.timestamp <= closingTime)) {
+                    activities.push({
+                        id: stageId,
+                        timestamp: change.timestamp
+                    });
+                }
+            }
+        } else {
+            // Continue recursing for nested stages
+            if (stage.children && stage.children.length > 0) {
+                for (const child of stage.children) {
+                    this.collectActivitiesFromChildren(child, activities, openingTime, closingTime);
                 }
             }
         }

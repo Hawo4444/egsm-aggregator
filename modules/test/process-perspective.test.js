@@ -2015,7 +2015,7 @@ test('ITERATION - Skipping A1', async () => {
   expect(data).toEqual(expected)
 })
 
-test('ITERATION - 3 iterations, A1 in the first last', async () => {
+test('ITERATION - 3 iterations, A1 skipped in the last', async () => {
   //B
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
