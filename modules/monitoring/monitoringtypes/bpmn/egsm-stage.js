@@ -1,5 +1,3 @@
-const fs = require('fs');
-const debugLog = fs.createWriteStream('debug.log', { flags: 'w' });
 /**
  * Class representing an eGSM Stage
  */
@@ -197,7 +195,6 @@ class EgsmStage {
             this.compliance = compliance
         }
         this.recordHistory()
-        debugLog.write(new Date().toISOString() + ' - ' + this.type + ': ' + this.id + ', status: ' + status + ', state: ' + state + ' compliance: ' + compliance + '\n');        
     }
 
     /**

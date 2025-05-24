@@ -119,16 +119,14 @@ class ProcessPerspective {
     }
 
     /**
- * Performs a full analysis on the eGSM model and detect deviations
- * The function will also reset the BPMN model (to remove old deviations), synchronize its states with the current eGSM ones
- * and apply the discovered deviations on it, so we can be sure that after the termination of this function the BPMN will be synchronized with the eGSM model 
- * @returns Returns by the discovered deviations as a list of Deviation instances
- */
+     * Performs a full analysis on the eGSM model and detect deviations
+     * The function will also reset the BPMN model (to remove old deviations), synchronize its states with the current eGSM ones
+     * and apply the discovered deviations on it, so we can be sure that after the termination of this function the BPMN will be synchronized with the eGSM model 
+     * @returns Returns by the discovered deviations as a list of Deviation instances
+     */
     analyze() {
         // Process tree traversal to find deviations
         const deviations = [];
-
-        // Single loop with proper array concatenation
         for (const key in this.egsm_model.model_roots) {
             const rootStage = this.egsm_model.model_roots[key];
             this._analyzeStage(rootStage, deviations);
@@ -159,7 +157,6 @@ class ProcessPerspective {
         const currentStage = this.egsm_model.stages.get(stage);
         const updatedParentIteration = currentStage.type === 'ITERATION' ? currentStage : closestParentIteration;
 
-        // Process all children in a single loop
         currentStage.children.forEach(child => {
             this._analyzeStage(child, discoveredDeviations, updatedParentIteration);
             this._analyzeRecursive(child, discoveredDeviations, updatedParentIteration);
@@ -177,10 +174,8 @@ class ProcessPerspective {
      * @returns An array of Deviation instances, containing the content of 'discoveredDeviations' argument and the freshly discovered Deviations
      */
     _analyzeStage(stage, discoveredDeviations, closestParentIteration) {
-        console.log('analyze stage:' + stage);
         const currentStage = this.egsm_model.stages.get(stage);
         const currentStageOpenClosePairs = currentStage.getOpenClosePairs();
-
         let pairsToAnalyze = [];
 
         if (closestParentIteration && closestParentIteration.getOpenClosePairs().length > 0) {
@@ -219,8 +214,7 @@ class ProcessPerspective {
 
     _findDeviations(deviations, stage, currentStage, iterationPair, parentPair, parentPairIndex) {
         const iterationIndex = iterationPair ? iterationPair.index : -1;
-
-        // Categorize children in a single pass
+        // Categorize children
         const childCategories = this._categorizeChildren(stage, parentPair);
         const { open, unopened, skipped, outOfOrder } = childCategories;
 
@@ -249,7 +243,7 @@ class ProcessPerspective {
     }
 
     /**
-     * Categorize children stages in a single pass
+     * Categorize children stages
      */
     _categorizeChildren(stage, parentPair) {
         const open = new Set();
@@ -289,7 +283,7 @@ class ProcessPerspective {
         // MULTIEXECUTION deviation
         this._processMultiExecution(deviations, currentStage, parentPair, outOfOrder, parentPairIndex, iterationIndex);
 
-        // INCORRECTEXECUTIONSEQUENCE and SKIP deviation
+        // INCORRECTEXECUTIONSEQUENCE and SKIP deviations
         const skippings = this._processSequenceSkippings(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, unopened, outOfOrder);
 
         // Handle remaining unopened stages if parent should be closed
@@ -353,7 +347,7 @@ class ProcessPerspective {
         if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
             unopened.forEach(unopenedElement => {
                 const condition = this.egsm_model.stages.get(unopenedElement).getLatestCondition(parentPair.close);
-                if (condition?.value === true) {
+                if (condition === true) {
                     deviations.push(new SkipDeviation([unopenedElement], 'NONE', parentPairIndex, iterationIndex));
                     this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED');
                 }
@@ -422,7 +416,7 @@ class ProcessPerspective {
         for (let j = startIndex + 1; j < processFlow.length; j++) {
             const nextItem = processFlow[j];
             if (nextItem.state === "OPEN") {
-                // Store both ID and timestamp to preserve chronological order
+                // Store timestamp to preserve chronological order
                 overlapped.push({
                     id: nextItem.id,
                     timestamp: nextItem.timestamp
@@ -478,9 +472,9 @@ class ProcessPerspective {
 
             if (count > 1) {
                 deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex));
-                if (firstOpening?.status === 'OUTOFORDER') {
+                if (firstOpening?.compliance === 'OUTOFORDER') {
                     const condition = stage.getConditionAt(firstOpening.timestamp);
-                    if (condition?.value === false) {
+                    if (condition === false) {
                         deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
                     }
                 }
@@ -764,8 +758,6 @@ class ProcessPerspective {
 
     extractActivitiesFromOverlapped(overlappedItems, openingTime, closingTime) {
         const activities = [];
-
-        // overlappedItems now contains objects with {id, timestamp} instead of just IDs
         for (const overlappedItem of overlappedItems) {
             this.collectActivitiesWithTiming(overlappedItem, activities, openingTime, closingTime);
         }
@@ -792,8 +784,7 @@ class ProcessPerspective {
                 timestamp: overlappedItem.timestamp
             });
         } else {
-            // For composite stages, recurse into children
-            // to find activities that opened during the overlap period
+            // For stages with children, recurse to find activities that opened during the overlap period
             if (stage.children && stage.children.length > 0) {
                 for (const child of stage.children) {
                     this.collectActivitiesFromChildren(child, activities, openingTime, closingTime);
@@ -820,7 +811,6 @@ class ProcessPerspective {
                 }
             }
         } else {
-            // Continue recursing for nested stages
             if (stage.children && stage.children.length > 0) {
                 for (const child of stage.children) {
                     this.collectActivitiesFromChildren(child, activities, openingTime, closingTime);

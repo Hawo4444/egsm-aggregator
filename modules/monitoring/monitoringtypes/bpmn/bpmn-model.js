@@ -3,8 +3,6 @@ var xml2js = require('xml2js');
 const { BpmnBlock, BpmnTask, BpmnConnection, BpmnGateway, BpmnEvent, BpmnBlockOverlayReport, Point } = require("./bpmn-constructs");
 
 const fs = require('fs');
-const debugLog = fs.createWriteStream('deviations.log', { flags: 'w' });
-const overlapLog = fs.createWriteStream('overlaps.log', { flags: 'w' });
 
 /**
  * Class representing a BPMN model
@@ -298,7 +296,6 @@ class BpmnModel {
 
                 break;
             case 'OVERLAP':
-                overlapLog.write(new Date().toISOString() + ' - ' + this.perspective_name + ': OVERLAP: ' + deviation.block_a + ' - ' + deviation.block_b + '\n')
                 if (this.constructs.has(deviation.block_b)) {
                     this.constructs.get(deviation.block_b).addDeviation('OVERLAP', { over: deviation.block_a, iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
@@ -491,22 +488,6 @@ class BpmnModel {
                 var color = element.getBlockColor()
                 var flags = element.deviations || []
                 result.push(new BpmnBlockOverlayReport(this.perspective_name, element.id, color, flags))
-            }
-        });
-
-        /*this.overlay_constructs.forEach(element => {
-            if (element.constructor.name == 'BpmnTask' || element.constructor.name == 'BpmnEvent' || element.constructor.name == 'BpmnConnection') {
-                var color = element.getBlockColor()
-                var flags = []
-                result.push(new BpmnBlockOverlayReport(this.perspective_name, element.id, color, flags))
-            }
-        });*/
-        debugLog.write(new Date().toISOString() + ' - ' + this.perspective_name + ': Deviations:\n')
-        this.constructs.forEach(element => {
-            if (element.constructor.name == 'BpmnTask' || element.constructor.name == 'BpmnEvent' || element.constructor.name == 'BpmnConnection' || element.constructor.name == 'BpmnGateway') {
-                if (element.deviations) {
-                    debugLog.write(JSON.stringify(element.deviations, null, 2) + '\n')
-                }
             }
         });
         return result
