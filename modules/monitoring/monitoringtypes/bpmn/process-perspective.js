@@ -489,7 +489,8 @@ class ProcessPerspective {
 
     _processInclusiveOutOfOrder(deviations, outOfOrder, parentPair, parentPairIndex, iterationIndex) {
         outOfOrder.forEach(outOfOrderElement => {
-            const history = this.egsm_model.stages.get(outOfOrderElement).getHistory().filter(e => e.timestamp > parentPair.open && e.timestamp < parentPair.close);
+            const history = this.egsm_model.stages.get(outOfOrderElement).getHistory().filter(e => e.timestamp > parentPair.open 
+                &&  (parentPair.close === null || e.timestamp < parentPair.close));
             let count = 0;
             let firstOpening = null;
 
@@ -504,7 +505,7 @@ class ProcessPerspective {
 
             if (count > 1) {
                 deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex));
-                if (firstOpening?.status === 'OUTOFORDER') {
+                if (firstOpening?.compliance === 'OUTOFORDER') {
                     deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
                 }
             } else {
@@ -625,11 +626,8 @@ class ProcessPerspective {
             if (currentStage.getLatestChange(parentPair?.close).state === 'OPEN') {
                 deviations.push(new IncompleteDeviation(currentStage.id, parentPairIndex, parentPairIndex));
             }
-
-            if (parentPair?.close === null && currentStage.state === 'UNOPENED') {
-                deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, iterationIndex));
-            } else if (currentStage.getLatestChange(parentPair?.close).state === 'CLOSED') {
-                if (this.egsm_model.stages.get(currentStage.children[1]).getLatestChange(parentPair?.close).state !== 'UNOPENED') {
+            if (parentPair?.close !== null) {
+                if (this.egsm_model.stages.get(currentStage.children[1]).getOpeningTimeBetween(parentPair?.open, parentPair?.close) !== null) {
                     if (parentPairIndex === currentStage.getOpenClosePairs().length - 1) {
                         deviations.push(new SkipDeviation([currentStage.id], 'NONE', parentPairIndex + 1, parentPairIndex + 1));
                     }
@@ -711,22 +709,9 @@ class ProcessPerspective {
         }
     }
 
-    _findParentIteration(stage) {
-        let currentStage = stage;
-        while (currentStage.parent && currentStage.parent !== 'NONE' && currentStage.parent !== 'NA') {
-            currentStage = this.egsm_model.stages.get(currentStage.parent);
-            if (currentStage.type === 'ITERATION') {
-                return currentStage;
-            }
-        }
-        return null;
-    }
-
     _getProcessFlow(children, pair) {
         let processFlow = [];
-        if (pair == null) {
-            return processFlow;
-        }
+        if (pair == null) return processFlow;
         for (let key in children) {
             const history = this.egsm_model.stages.get(children[key]).getHistory();
             for (let change of history) {
@@ -746,12 +731,7 @@ class ProcessPerspective {
                 });
             }
         }
-
-        processFlow.sort((a, b) => {
-            if (a.timestamp === null) return 1;
-            if (b.timestamp === null) return -1;
-            return a.timestamp - b.timestamp;
-        });
+        processFlow.sort((a, b) => a.timestamp - b.timestamp);
 
         return processFlow;
     }
@@ -761,13 +741,7 @@ class ProcessPerspective {
         for (const overlappedItem of overlappedItems) {
             this.collectActivitiesWithTiming(overlappedItem, activities, openingTime, closingTime);
         }
-
-        // Sort activities by their opening time
-        activities.sort((a, b) => {
-            if (a.timestamp === null) return 1;
-            if (b.timestamp === null) return -1;
-            return a.timestamp - b.timestamp;
-        });
+        activities.sort((a, b) => a.timestamp - b.timestamp);
 
         // Return just the activity IDs in time order
         return activities.map(activity => activity.id);

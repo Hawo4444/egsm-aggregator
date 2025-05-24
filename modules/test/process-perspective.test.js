@@ -1734,6 +1734,58 @@ test('INCLUSIVE - Executing one of the correct branches twice', async () => {
   expect(data).toEqual(expected)
 })
 
+test('INCLUSIVE - Executing an incorrect branch three times', async () => {
+  //C, C, C
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'NA'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'INCLUSIVE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', true)
+  eGSM.recordStageCondition('ch3', false)
+  ch3.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new MultiExecutionDeviation('ch3', 3, 0, -1),
+    new IncorrectBranchDeviation('ch3', 0, -1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
 test('INCLUSIVE - Executing one of the correct branches partially only - parent should be closed', async () => {
   //B, A_s
   //Children stages
@@ -1932,7 +1984,6 @@ test('INCLUSIVE - Executing multiple unintended branches beside the correct one'
 })
 
 //ITERATION block tests - A(ch1) -> B(ch2)
-//Don't think this is even possible
 test('ITERATION - Incorrect execution sequence - 1 stage', async () => {
   //B, A
   //Children stages
@@ -1968,7 +2019,9 @@ test('ITERATION - Incorrect execution sequence - 1 stage', async () => {
   ch1.update(undefined, 'OPEN', 'OUTOFORDER')
   ch1.update(undefined, 'CLOSED', undefined)
 
-  var expected = [new IncorrectExecutionSequenceDeviation('parent', 'NONE', 0, 0)]
+  var expected = [
+    new IncorrectExecutionSequenceDeviation('parent', 'NONE', 0, 0)
+  ]
   var data = pers1.analyze()
   console.log(data)
   expect(data).toEqual(expected)
@@ -2866,7 +2919,7 @@ test('EXCLUSIVE&SEQUENCE - Correct sequence branch reopens', async () => {
 })
 
 test('SEQUENCE&LOOP - Loop should be closed and two iterations, first is correct, second incorrect order second incomplete', async () => {
-  //e, A, B, B, A, A_s, f - both A and B were correct branches
+  //e, A, B, B, A, A_s, f
   //Children stages
   var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
   ch1.type = 'ACTIVITY'
@@ -2947,6 +3000,403 @@ test('SEQUENCE&LOOP - Loop should be closed and two iterations, first is correct
     new IncompleteDeviation('loop', 0, -1),
     new IncompleteDeviation('iteration', 2, 2),
     new IncompleteDeviation('ch2', 2, -1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE&LOOP - Incorrect loop exit, one more iteration should have been executed', async () => {
+  //e, A, B, f - both A and B were correct branches
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'iteration', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'iteration', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'loop'
+
+  //Parent stages
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'loop', 'ch4']
+
+  var iteration = new EgsmStage('iteration', 'iteration', 'loop', 'EXCEPTION', '')
+  iteration.type = 'ITERATION'
+  iteration.direct_predecessor = 'NA'
+  iteration.children = ['ch2', 'ch3']
+
+  var loop = new EgsmStage('loop', 'loop', 'parent', 'EXCEPTION', '')
+  loop.type = 'LOOP'
+  loop.direct_predecessor = 'ch1'
+  loop.children = ['iteration']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('loop', loop)
+  eGSM.stages.set('iteration', iteration)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  loop.update(undefined, 'OPEN', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new OverlapDeviation(['ch4'], 'loop', 0, -1),
+    new IncompleteDeviation('loop', 0, -1),
+    new SkipDeviation(['iteration'], 'NONE', 1, 1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE&LOOP - Incorrect loop exit, last iteration not finished', async () => {
+  //e, A, B, f - both A and B were correct branches
+  //Children stages`
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'iteration', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'iteration', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'loop'
+
+  //Parent stages
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'loop', 'ch4']
+
+  var iteration = new EgsmStage('iteration', 'iteration', 'loop', 'EXCEPTION', '')
+  iteration.type = 'ITERATION'
+  iteration.direct_predecessor = 'NA'
+  iteration.children = ['ch2', 'ch3']
+
+  var loop = new EgsmStage('loop', 'loop', 'parent', 'EXCEPTION', '')
+  loop.type = 'LOOP'
+  loop.direct_predecessor = 'ch1'
+  loop.children = ['iteration']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('loop', loop)
+  eGSM.stages.set('iteration', iteration)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  loop.update(undefined, 'OPEN', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new OverlapDeviation(['ch4'], 'loop', 0, -1),
+    new IncompleteDeviation('loop', 0, -1),
+    new IncompleteDeviation('iteration', 1, 1),
+    new IncompleteDeviation('ch2', 1, -1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE&LOOP - Incorrect loop exit, last iteration not finished, iteration children unopened', async () => {
+  //e, A, B, f - both A and B were correct branches
+  //Children stages`
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'iteration', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'iteration', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'loop'
+
+  //Parent stages
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'loop', 'ch4']
+
+  var iteration = new EgsmStage('iteration', 'iteration', 'loop', 'EXCEPTION', '')
+  iteration.type = 'ITERATION'
+  iteration.direct_predecessor = 'NA'
+  iteration.children = ['ch2', 'ch3']
+
+  var loop = new EgsmStage('loop', 'loop', 'parent', 'EXCEPTION', '')
+  loop.type = 'LOOP'
+  loop.direct_predecessor = 'ch1'
+  loop.children = ['iteration']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('loop', loop)
+  eGSM.stages.set('iteration', iteration)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'CLOSED', undefined)
+  loop.update(undefined, 'OPEN', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'UNOPENED', undefined)
+
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new OverlapDeviation(['ch4'], 'loop', 0, -1),
+    new IncompleteDeviation('loop', 0, -1),
+    new IncompleteDeviation('iteration', 1, 1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE&LOOP - Activity overlapped with multiple openings of iteration branches', async () => {
+  //e_s, A, B, A, f - both A and B were correct branches
+  //Children stages`
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'iteration', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'iteration', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'loop'
+
+  //Parent stages
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'loop', 'ch4']
+
+  var iteration = new EgsmStage('iteration', 'iteration', 'loop', 'EXCEPTION', '')
+  iteration.type = 'ITERATION'
+  iteration.direct_predecessor = 'NA'
+  iteration.children = ['ch2', 'ch3']
+
+  var loop = new EgsmStage('loop', 'loop', 'parent', 'EXCEPTION', '')
+  loop.type = 'LOOP'
+  loop.direct_predecessor = 'ch1'
+  loop.children = ['iteration']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('loop', loop)
+  eGSM.stages.set('iteration', iteration)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  loop.update(undefined, 'OPEN', 'OUTOFORDER')
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  loop.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new OverlapDeviation(['ch2', 'ch3', 'ch2', 'ch4'], 'ch1', 0, -1),
+    new IncompleteDeviation('ch1', 0, -1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('SEQUENCE&LOOP - Activity overlapped with multiple openings of iteration branches, eventually closed', async () => {
+  //e_s, A, B, A, B, e_e, A, f - both A and B were correct branches
+  //Children stages`
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'iteration', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'iteration', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'loop'
+
+  //Parent stages
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'loop', 'ch4']
+
+  var iteration = new EgsmStage('iteration', 'iteration', 'loop', 'EXCEPTION', '')
+  iteration.type = 'ITERATION'
+  iteration.direct_predecessor = 'NA'
+  iteration.children = ['ch2', 'ch3']
+
+  var loop = new EgsmStage('loop', 'loop', 'parent', 'EXCEPTION', '')
+  loop.type = 'LOOP'
+  loop.direct_predecessor = 'ch1'
+  loop.children = ['iteration']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('loop', loop)
+  eGSM.stages.set('iteration', iteration)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  loop.update(undefined, 'OPEN', 'OUTOFORDER')
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  ch3.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  ch1.update(undefined, 'CLOSED', undefined)
+
+  iteration.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'UNOPENED', undefined)
+  ch2.update(undefined, 'OPEN', undefined)
+  ch2.update(undefined, 'CLOSED', undefined)
+  iteration.update(undefined, 'CLOSED', undefined)
+
+  loop.update(undefined, 'CLOSED', undefined)
+  ch4.update(undefined, 'OPEN', undefined)
+  ch4.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new OverlapDeviation(['ch2', 'ch3', 'ch2', 'ch3'], 'ch1', 0, -1)
   ]
   var data = pers1.analyze()
   console.log(data)
