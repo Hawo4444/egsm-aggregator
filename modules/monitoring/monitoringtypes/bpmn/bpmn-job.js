@@ -11,7 +11,7 @@ module.id = "BPMN"
 // Import performance tracker
 let performanceTracker;
 try {
-  performanceTracker = require('../../../egsm-common/auxiliary/monitoring/performance-tracker');
+  performanceTracker = require('../../../egsm-common/monitoring/performanceTracker');
 } catch (e) {
   performanceTracker = null;
   LOG.logSystem('WARNING', 'Performance tracker not available in BpmnJob: ' + e.message, module.id);
@@ -27,24 +27,19 @@ class BpmnJob extends Job {
     this.perspectives = new Map()
 
     perspectives.forEach(element => {
-      this.perspectives.set(element.name, new ProcessPerspective(element.name, element.egsm_model, element.bpmn_diagram))
+      LOG.logSystem('DEBUG', `Loading perspective: ${element.perspective_name}`, module.id)
+      this.perspectives.set(element.perspective_name, new ProcessPerspective(element.perspective_name, element.perspective_path))
     });
   }
 
   /**
-   * Extract correlation ID from message object for performance tracking
+   * Extract event ID from message object for performance tracking
    */
-  extractCorrelationId(messageObj) {
-    // Try multiple possible correlation ID fields
-    if (messageObj._correlationId) return messageObj._correlationId;
-    if (messageObj.correlationId) return messageObj.correlationId;
-    if (messageObj.correlation_id) return messageObj.correlation_id;
-
-    // Fallback: create correlation ID from process identifiers
-    if (messageObj.process_type && messageObj.process_id && messageObj.process_perspective) {
-      return `${messageObj.process_type}/${messageObj.process_id}__${messageObj.process_perspective}`;
-    }
-
+  extractEventId(messageObj) {
+    // Try multiple possible event ID fields
+    if (messageObj._eventId) return messageObj._eventId;
+    if (messageObj.eventId) return messageObj.eventId;
+    if (messageObj.event_id) return messageObj.event_id;
     return null;
   }
 
@@ -56,11 +51,10 @@ class BpmnJob extends Job {
     console.log(messageObj)
 
     // Performance tracking: Record that aggregator received an event
-    const correlationId = this.extractCorrelationId(messageObj);
-    this.currentCorrelationId = correlationId;
-
-    if (performanceTracker && correlationId) {
-      performanceTracker.trackAggregatorReceived(correlationId, {
+    const eventId = this.extractEventId(messageObj);
+    
+    if (performanceTracker && eventId) {
+      performanceTracker.recordEvent(eventId, 'aggregator_received', {
         jobId: this.id,
         processType: messageObj.process_type,
         processId: messageObj.process_id,
@@ -72,26 +66,10 @@ class BpmnJob extends Job {
 
     var process = messageObj.process_type + '/' + messageObj.process_id + '__' + messageObj.process_perspective
     if (!this.monitoredprocesses.has(process)) {
-      // Track early completion for not monitored process
-      if (performanceTracker && correlationId) {
-        performanceTracker.trackDetectionComplete(correlationId, {
-          result: 'not_monitored',
-          deviations: [],
-          jobId: this.id
-        });
-      }
       return;
     }
 
     if (!this.perspectives.has(messageObj.process_perspective)) {
-      // Track early completion for missing perspective
-      if (performanceTracker && correlationId) {
-        performanceTracker.trackDetectionComplete(correlationId, {
-          result: 'perspective_not_found',
-          deviations: [],
-          jobId: this.id
-        });
-      }
       return;
     }
 
@@ -103,25 +81,16 @@ class BpmnJob extends Job {
 
     if (isConditionEvent) {
       egsm.recordStageCondition(messageObj.stage_name, messageObj.condition)
-      // Condition events don't trigger analysis, so track completion immediately
-      if (performanceTracker && correlationId) {
-        performanceTracker.trackDetectionComplete(correlationId, {
+      
+      // Track completion for condition events
+      if (performanceTracker && eventId) {
+        performanceTracker.recordEvent(eventId, 'detection_complete', {
           result: 'condition_recorded',
-          deviations: [],
-          jobId: this.id,
-          isConditionEvent: true
+          jobId: this.id
         });
       }
     } else {
       if (!egsm.stages.has(messageObj.stage_name)) {
-        // Track early completion for missing stage
-        if (performanceTracker && correlationId) {
-          performanceTracker.trackDetectionComplete(correlationId, {
-            result: 'stage_not_found',
-            deviations: [],
-            jobId: this.id
-          });
-        }
         return;
       }
 
@@ -135,22 +104,22 @@ class BpmnJob extends Job {
       // This is the key deviation detection call
       deviations = perspective.analyze()
 
-      this.triggerCompleteUpdateEvent()
-      console.log(deviations)
-
-      // Performance tracking: Track detection completion
-      if (performanceTracker && correlationId) {
-        performanceTracker.trackDetectionComplete(correlationId, {
+      // Track detection completion
+      if (performanceTracker && eventId) {
+        performanceTracker.recordEvent(eventId, 'detection_complete', {
           result: 'success',
-          deviations: deviations || [],
           deviationCount: deviations ? deviations.length : 0,
           jobId: this.id,
           perspective: messageObj.process_perspective,
           stageName: messageObj.stage_name
         });
       }
+
+      this.triggerCompleteUpdateEvent()
+      console.log(deviations)
     }
 
+    // Validation code (commented out in original)
     /*var errors = Validator.validateProcessStage(messageObj.stage)
     if (errors.length > 0) {
         console.debug(`Faulty stage of process [${messageObj.processtype}/${messageObj.instanceid}]__${messageObj.perspective} detected: ${JSON.stringify(errors)}`)
@@ -229,18 +198,17 @@ class BpmnJob extends Job {
   triggerCompleteUpdateEvent() {
     // Performance tracking: Track frontend update event
     const updateData = this.getCompleteUpdate();
-
-    if (performanceTracker && this.currentCorrelationId) {
-      updateData._correlationId = this.currentCorrelationId;
-      performanceTracker.trackFrontendUpdate(this.currentCorrelationId, {
-        jobId: this.id,
-        updateType: 'complete_update'
-      });
-    }
-
     this.eventEmitter.emit('job-update', updateData)
   }
 }
+
+// Add graceful shutdown to export data
+process.on('SIGINT', () => {
+  if (performanceTracker) {
+    performanceTracker.exportToFile();
+  }
+  process.exit(0);
+});
 
 module.exports = {
   BpmnJob

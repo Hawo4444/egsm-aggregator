@@ -1,3 +1,5 @@
+process.env.EGSM_COMPONENT_ID = 'aggregator';
+
 var fs = require('fs');
 
 var LOG = require('./modules/egsm-common/auxiliary/logManager')
