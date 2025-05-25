@@ -5,6 +5,7 @@ const { Validator } = require('../../../egsm-common/auxiliary/validator')
 const { Job } = require('../job')
 const { ProcessPerspective } = require('./process-perspective')
 const { SkipDeviation, IncompleteDeviation } = require("./process-perspective");
+const performanceTracker = require('../../../egsm-common/monitoring/performanceTracker');
 
 module.id = "BPMN"
 
@@ -28,6 +29,12 @@ class BpmnJob extends Job {
    */
   onProcessEvent(messageObj) {
     console.log(messageObj)
+    if (messageObj.correlationId) {
+      performanceTracker.recordEvent(messageObj.correlationId, 'aggregator_received', {
+        process: `${messageObj.process_type}/${messageObj.process_id}__${messageObj.process_perspective}`,
+        stage: messageObj.stage_name || 'unknown'
+      });
+    }
     var process = messageObj.process_type + '/' + messageObj.process_id + '__' + messageObj.process_perspective
     if (!this.monitoredprocesses.has(process))
       return
@@ -47,6 +54,14 @@ class BpmnJob extends Job {
       egsm.updateStage(messageObj.stage_name, messageObj.status.toUpperCase(), messageObj.state.toUpperCase(), messageObj.compliance.toUpperCase())
       perspective.egsm_model.stages.forEach(stage => stage.cleanPropagations())
       var deviations = perspective.analyze()
+
+      if (messageObj.correlationId) {
+        performanceTracker.recordEvent(messageObj.correlationId, 'aggregator_analyzed', {
+          process: process,
+          deviations: deviations ? deviations.length : 0
+        });
+      }
+
       this.triggerCompleteUpdateEvent()
       console.log(deviations)
     }
