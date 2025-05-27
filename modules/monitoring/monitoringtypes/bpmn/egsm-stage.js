@@ -183,7 +183,7 @@ class EgsmStage {
      */
     update(status, state, compliance) {
         if (this.status === status && this.state === state && this.compliance === compliance) {
-            return
+            return false
         }
         if (status) {
             this.status = status
@@ -195,6 +195,7 @@ class EgsmStage {
             this.compliance = compliance
         }
         this.recordHistory()
+        return true
     }
 
     /**

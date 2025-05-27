@@ -1,5 +1,3 @@
-process.env.EGSM_COMPONENT_ID = 'aggregator';
-
 var fs = require('fs');
 
 var LOG = require('./modules/egsm-common/auxiliary/logManager')
@@ -11,7 +9,6 @@ var AUX = require('./modules/egsm-common/auxiliary/auxiliary')
 const { MonitoringManager } = require('./modules/monitoring/monitoringmanager');
 const { NotificationManager } = require('./modules/communication/notificationmanager');
 const { ProcessNotification } = require('./modules/egsm-common/auxiliary/primitives');
-const performanceTracker = require('./modules/egsm-common/monitoring/performanceTracker');
 
 const CONFIG_FILE = './config.xml'
 module.id = "MAIN"
@@ -33,9 +30,3 @@ MQTTCOMM.initPrimaryBrokerConnection(CONNCONFIG.getConfig().primary_broker).then
     LOG.logSystem('DEBUG', `Unique ID found: [${result}]`, module.id)
     LOG.logSystem('DEBUG', 'Aggregator initialization ready!', module.id)
 })
-
-process.on('SIGINT', () => {
-    LOG.logSystem('INFO', 'Shutting down aggregator...', module.id);
-    performanceTracker.exportToFile();
-    process.exit(0);
-});

@@ -756,6 +756,58 @@ test('SEQUENCE - Overlapped activities', async () => {
   expect(data).toEqual(expected)
 })
 
+test('SEQUENCE - Overlapped activities, multiple skips', async () => {
+  //e_s, f
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NONE'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'ch1'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'ch2'
+  var ch4 = new EgsmStage('ch4', 'ch4', 'parent', 'EXCEPTION', '')
+  ch4.type = 'ACTIVITY'
+  ch4.direct_predecessor = 'ch3'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'SEQUENCE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3', 'ch4']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  eGSM.stages.set('ch4', ch4)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  ch1.update(undefined, 'OPEN', undefined)
+  ch3.update(undefined, undefined, 'SKIPPED')
+  ch4.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch4.update(undefined, 'CLOSED', undefined)
+
+  var expected = [
+    new OverlapDeviation(['ch4'], 'ch1', 0, -1),
+    new IncompleteDeviation('ch1', 0, -1),
+    new SkipDeviation(['ch2', 'ch3'], 'ch4', 0, -1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
 //PARALLEL block tests
 test('PARALLEL - One stage not executed at all - parent should be closed', async () => {
   //B

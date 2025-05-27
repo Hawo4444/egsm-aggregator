@@ -27,7 +27,7 @@ class EgsmModel {
      * @param {*} compliance New Compliance
      */
     updateStage(stageId, status, state, compliance) {
-        this.stages.get(stageId).update(status, state, compliance)
+        return this.stages.get(stageId).update(status, state, compliance)
     }
 
     /**

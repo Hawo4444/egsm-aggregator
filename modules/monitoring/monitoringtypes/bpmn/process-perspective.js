@@ -331,7 +331,7 @@ class ProcessPerspective {
         });
     }
 
-    _handleInclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, outOfOrder }) {
+    _handleInclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, skipped, outOfOrder }) {
         // INCOMPLETE deviation
         if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
             open.forEach(openElement => {
@@ -345,12 +345,16 @@ class ProcessPerspective {
 
         // SKIP deviation
         if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-            unopened.forEach(unopenedElement => {
+            /*unopened.forEach(unopenedElement => {
                 const condition = this.egsm_model.stages.get(unopenedElement).getLatestCondition(parentPair.close);
-                if (condition === true) {
+                if (condition) {
                     deviations.push(new SkipDeviation([unopenedElement], 'NONE', parentPairIndex, iterationIndex));
                     this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED');
                 }
+            });*/
+            skipped.forEach(skippedElement => {
+                deviations.push(new SkipDeviation([skippedElement], 'NONE', parentPairIndex, iterationIndex));
+                this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED');
             });
         }
     }
@@ -474,13 +478,13 @@ class ProcessPerspective {
                 deviations.push(new MultiExecutionDeviation(outOfOrderElement, count, parentPairIndex, iterationIndex));
                 if (firstOpening?.compliance === 'OUTOFORDER') {
                     const condition = stage.getConditionAt(firstOpening.timestamp);
-                    if (condition === false) {
+                    if (!condition) {
                         deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
                     }
                 }
             } else {
                 const condition = stage.getConditionAt(stage.getLatestOpening().timestamp);
-                if (condition === false) {
+                if (!condition) {
                     deviations.push(new IncorrectBranchDeviation(outOfOrderElement, parentPairIndex, iterationIndex));
                 }
             }
@@ -489,8 +493,8 @@ class ProcessPerspective {
 
     _processInclusiveOutOfOrder(deviations, outOfOrder, parentPair, parentPairIndex, iterationIndex) {
         outOfOrder.forEach(outOfOrderElement => {
-            const history = this.egsm_model.stages.get(outOfOrderElement).getHistory().filter(e => e.timestamp > parentPair.open 
-                &&  (parentPair.close === null || e.timestamp < parentPair.close));
+            const history = this.egsm_model.stages.get(outOfOrderElement).getHistory().filter(e => e.timestamp > parentPair.open
+                && (parentPair.close === null || e.timestamp < parentPair.close));
             let count = 0;
             let firstOpening = null;
 
@@ -588,13 +592,6 @@ class ProcessPerspective {
 
     _handleRemainingUnopened(currentStage, unopened, skippings) {
         if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-            unopened.forEach(unopenedElement => {
-                skippings.set(null, [unopenedElement]);
-                this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED');
-            });
-        }
-
-        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
             const lastElement = [...unopened].find(candidate => {
                 return ![...unopened].some(other =>
                     this.egsm_model.stages.get(other).direct_predecessor === candidate
@@ -683,6 +680,16 @@ class ProcessPerspective {
     _propagateShouldBeClosed(stage, parentPair) {
         const childStages = (stage.children || []).map(id => this.egsm_model.stages.get(id));
         if (childStages.length === 0) return;
+
+        if (stage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            childStages.forEach(childStage => {
+                const latestChange = childStage.getLatestChange(parentPair?.close);
+                if (latestChange && latestChange.state !== 'CLOSED') {
+                    childStage.propagateCondition('SHOULD_BE_CLOSED');
+                }
+            });
+            return;
+        }
 
         let lastStage = null;
         const predecessorIds = new Set(childStages.map(s => s.direct_predecessor).filter(id => id));
