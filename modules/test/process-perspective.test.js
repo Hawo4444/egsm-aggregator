@@ -1398,7 +1398,6 @@ test('EXCLUSIVE - Partially executing the correct branch - parent should not be 
   expect(data).toEqual(expected)
 })
 
-//Check skip here
 test('EXCLUSIVE - Partially executing an incorrect branch - parent should be closed', async () => {
   //B_s
   //Children stages
@@ -1437,7 +1436,6 @@ test('EXCLUSIVE - Partially executing an incorrect branch - parent should be clo
   eGSM.recordStageCondition('ch3', false)
   ch2.update(undefined, 'OPEN', 'OUTOFORDER')
   stage1.propagateCondition('SHOULD_BE_CLOSED')
-  ch1.update(undefined, undefined, 'SKIPPED')
 
   var expected = [
     new IncompleteDeviation('ch2', 0, -1),
@@ -1539,7 +1537,6 @@ test('EXCLUSIVE - Partially executing a correct branch and executing an incorrec
   expect(data).toEqual(expected)
 })
 
-//Check skip here
 test('EXCLUSIVE - Partially executing a correct branch and executing an incorrect one - parent should be closed', async () => {
   //A_s, B
   //Children stages
@@ -2029,6 +2026,55 @@ test('INCLUSIVE - Executing multiple unintended branches beside the correct one'
   var expected = [
     new IncorrectBranchDeviation('ch2', 0, -1),
     new IncorrectBranchDeviation('ch3', 0, -1)
+  ]
+  var data = pers1.analyze()
+  console.log(data)
+  expect(data).toEqual(expected)
+})
+
+test('INCLUSIVE - Executing only an incorrect branch, parent should be closed', async () => {
+  //B
+  //Children stages
+  var ch1 = new EgsmStage('ch1', 'ch1', 'parent', 'EXCEPTION', '')
+  ch1.type = 'ACTIVITY'
+  ch1.direct_predecessor = 'NA'
+  var ch2 = new EgsmStage('ch2', 'ch2', 'parent', 'EXCEPTION', '')
+  ch2.type = 'ACTIVITY'
+  ch2.direct_predecessor = 'NA'
+  var ch3 = new EgsmStage('ch3', 'ch3', 'parent', 'EXCEPTION', '')
+  ch3.type = 'ACTIVITY'
+  ch3.direct_predecessor = 'NA'
+
+  //Parent stage
+  var stage1 = new EgsmStage('parent', 'parent', 'NA', 'EXCEPTION', '')
+  stage1.type = 'INCLUSIVE'
+  stage1.direct_predecessor = 'NONE'
+  stage1.children = ['ch1', 'ch2', 'ch3']
+
+  //Setting up the perspective
+  var eGSM = new EgsmModel()
+  var bpmn = new BpmnModel('pers1')
+  eGSM.model_roots.push('parent')
+  eGSM.stages.set('parent', stage1)
+  eGSM.stages.set('ch1', ch1)
+  eGSM.stages.set('ch2', ch2)
+  eGSM.stages.set('ch3', ch3)
+  var pers1 = new ProcessPerspective('pers-1')
+  pers1.egsm_model = eGSM
+  pers1.bpmn_model = bpmn
+
+  //Simulating the process flow
+  stage1.update(undefined, 'OPEN', undefined)
+  eGSM.recordStageCondition('ch1', true)
+  eGSM.recordStageCondition('ch2', false)
+  eGSM.recordStageCondition('ch3', false)
+  ch2.update(undefined, 'OPEN', 'OUTOFORDER')
+  ch2.update(undefined, 'CLOSED', undefined)
+  stage1.propagateCondition('SHOULD_BE_CLOSED')
+
+  var expected = [
+    new IncorrectBranchDeviation('ch2', 0, -1),
+    new SkipDeviation(['ch1'], 'NONE', 0, -1)
   ]
   var data = pers1.analyze()
   console.log(data)

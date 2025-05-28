@@ -312,7 +312,7 @@ class ProcessPerspective {
         this._processMultiExecutionFromHistory(deviations, outOfOrder, parentPairIndex, iterationIndex);
     }
 
-    _handleExclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, skipped, outOfOrder }) {
+    _handleExclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, outOfOrder }) {
         // INCOMPLETE deviation
         if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
             open.forEach(openElement => {
@@ -324,14 +324,21 @@ class ProcessPerspective {
         // MULTIEXECUTION and INCORRECTBRANCH deviations
         this._processExclusiveOutOfOrder(deviations, outOfOrder, parentPair, parentPairIndex, iterationIndex);
 
-        // SKIP deviations
-        skipped.forEach(skippedElement => {
-            deviations.push(new SkipDeviation([skippedElement], 'NONE', parentPairIndex, iterationIndex));
-            this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED');
-        });
+        // SKIP deviation
+        if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
+            for (const child of unopened) {
+                var childStage = this.egsm_model.stages.get(child);
+                const condition = childStage.getLatestCondition(parentPair.close);
+                if (condition) {
+                    deviations.push(new SkipDeviation([child], 'NONE', parentPairIndex, iterationIndex));
+                    childStage.propagateCondition('SHOULD_BE_CLOSED');
+                    break;
+                }
+            }
+        }
     }
 
-    _handleInclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, skipped, outOfOrder }) {
+    _handleInclusiveDeviations(deviations, currentStage, parentPair, parentPairIndex, iterationIndex, { open, unopened, outOfOrder }) {
         // INCOMPLETE deviation
         if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
             open.forEach(openElement => {
@@ -345,16 +352,13 @@ class ProcessPerspective {
 
         // SKIP deviation
         if (currentStage.propagated_conditions.has('SHOULD_BE_CLOSED')) {
-            /*unopened.forEach(unopenedElement => {
-                const condition = this.egsm_model.stages.get(unopenedElement).getLatestCondition(parentPair.close);
+            unopened.forEach(unopenedElement => {
+                var child = this.egsm_model.stages.get(unopenedElement);
+                const condition = child.getLatestCondition(parentPair.close);
                 if (condition) {
                     deviations.push(new SkipDeviation([unopenedElement], 'NONE', parentPairIndex, iterationIndex));
-                    this.egsm_model.stages.get(unopenedElement).propagateCondition('SHOULD_BE_CLOSED');
+                    child.propagateCondition('SHOULD_BE_CLOSED');
                 }
-            });*/
-            skipped.forEach(skippedElement => {
-                deviations.push(new SkipDeviation([skippedElement], 'NONE', parentPairIndex, iterationIndex));
-                this.egsm_model.stages.get(skippedElement).propagateCondition('SHOULD_BE_CLOSED');
             });
         }
     }
