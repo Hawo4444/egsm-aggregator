@@ -1,10 +1,12 @@
 var LOG = require('../../../egsm-common/auxiliary/logManager')
 var CONNCOMM = require('../../../egsm-common/config/connectionconfig')
+const MQTT = require('../../../egsm-common/communication/mqttconnector')
+var MQTTCONN = require('../../../communication/mqttcommunication')
 const { ProcessNotification } = require('../../../egsm-common/auxiliary/primitives')
 const { Validator } = require('../../../egsm-common/auxiliary/validator')
 const { Job } = require('../job')
 const { ProcessPerspective } = require('./process-perspective')
-const { SkipDeviation, IncompleteDeviation } = require("./process-perspective");
+const { SkipDeviation, IncompleteDeviation } = require("./process-perspective")
 
 module.id = "BPMN"
 
@@ -27,7 +29,6 @@ class BpmnJob extends Job {
    * @param {Object} messageObj received process event object 
    */
   onProcessEvent(messageObj) {
-    console.log(messageObj)
     var process = messageObj.process_type + '/' + messageObj.process_id + '__' + messageObj.process_perspective
     if (!this.monitoredprocesses.has(process))
       return
@@ -49,8 +50,8 @@ class BpmnJob extends Job {
         return
       perspective.egsm_model.stages.forEach(stage => stage.cleanPropagations())
       var deviations = perspective.analyze()
+      this.emitDeviations(deviations, messageObj)
       this.triggerCompleteUpdateEvent()
-      console.log(deviations)
     }
 
     /*var errors = Validator.validateProcessStage(messageObj.stage)
@@ -130,6 +131,31 @@ class BpmnJob extends Job {
    */
   triggerCompleteUpdateEvent() {
     this.eventEmitter.emit('job-update', this.getCompleteUpdate())
+  }
+
+  /**
+   * Emits the deviations for per process aggregation
+   * @param {Array} deviations List of deviations
+   * @param {Object} messageObj Process event object
+   */
+  emitDeviations(deviations, messageObj) {
+    if (deviations.length == 0)
+      return //TODO: Consider if we should emit empty deviations to get the process for the first time
+    const deviationMessage = {
+      request_id: require('uuid').v4(),
+      message_type: 'PROCESS_DEVIATIONS',
+      sender_id: require('../../../egsm-common/config/connectionconfig').getConfig().self_id, // Add this
+      payload: {
+        process_type: messageObj.process_type,
+        process_id: messageObj.process_id,
+        process_perspective: messageObj.process_perspective,
+        deviations: deviations,
+        timestamp: Date.now()
+      }
+    }
+    const broker = this.brokers[0]
+    MQTT.publishTopic(broker.host, broker.port, 'aggregators_to_aggregators',
+      JSON.stringify(deviationMessage))
   }
 }
 

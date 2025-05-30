@@ -3,6 +3,7 @@ const { ArtifactUsageStatisticProcessing } = require("./monitoringtypes/artifact
 const { ArtifactUnreliabilityAlert } = require("./monitoringtypes/artifact-unreliability-alert")
 const { ProcessDeviationDetection } = require("./monitoringtypes/process-deviation-detection")
 const { RealTimeProcessAggregation } = require('./monitoringtypes/real-time-process-aggregation')
+const { ProcessDeviationAggregation } = require('./monitoringtypes/process-deviation-aggregation');
 
 var CONNCONF = require('../egsm-common/config/connectionconfig')
 const { BpmnJob } = require("./monitoringtypes/bpmn/bpmn-job")
@@ -55,16 +56,24 @@ class JobFactory {
                     return new ProcessDeviationDetection(id, brokers, owner, monitored, monitoredprocessgroups, notificationrules, this.notification_manager)
                 }
                 case 'bpmn-job': {
+                    var brokers = [CONNCONF.getConfig().primary_broker]
                     var monitored = config['monitored']
                     var notificationrules = config['notificationrules']
                     var perspectives = config['perspectives']
-                    return new BpmnJob(config['id'], [], owner, monitored, [], notificationrules, this.notification_manager, perspectives)
+                    return new BpmnJob(config['id'], brokers, owner, monitored, [], notificationrules, this.notification_manager, perspectives)
                 }
                 case 'real-time-process-aggregation': {
                     var brokers = [CONNCONF.getConfig().primary_broker]
                     var processtype = config['processtype']
                     var notificationrules = config['notificationrules']
                     return new RealTimeProcessAggregation(config['id'], brokers, owner, processtype, notificationrules, this.notification_manager)
+                }
+                case 'process-deviation-aggregation': {
+                    var brokers = [CONNCONF.getConfig().primary_broker]
+                    var processtype = config['processtype']
+                    var perspectives = config['perspectives']
+                    var notificationrules = config['notificationrules']
+                    return new ProcessDeviationAggregation(id, brokers, owner, processtype, perspectives, notificationrules, this.notification_manager)
                 }
                 //Add further types when implemented!
                 default:

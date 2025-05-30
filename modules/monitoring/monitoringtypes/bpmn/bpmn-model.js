@@ -309,16 +309,12 @@ class BpmnModel {
                     : deviation.block_a;
                 const construct = this.constructs.get(constructId)
                 if (construct instanceof BpmnBlock) {
-                    console.log('INCOMPLETE: ' + deviation.block_a)
-                    console.log('Construct:', JSON.stringify(construct, null, 2))
                     construct.addDeviation('INCOMPLETE', { iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
             //TODO: consider branches
             case 'MULTI_EXECUTION':
                 if (this.constructs.has(deviation.block_a)) {
-                    console.log('MULTI_EXECUTION: ' + deviation.block_a)
-                    console.log('Construct:', JSON.stringify(this.constructs.get(deviation.block_a), null, 2))
                     this.constructs.get(deviation.block_a).addDeviation('MULTI_EXECUTION', { count: deviation.executionCount, iterationIndex: deviation.iterationIndex, parentIndex: deviation.parentIndex })
                 }
                 break;
