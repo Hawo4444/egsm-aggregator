@@ -126,7 +126,7 @@ class AggregatedBpmnModel extends BpmnModel {
     }
 
     /**
-     * Get overlay for aggregated view - this replaces the instance-specific overlay
+     * Get overlay for aggregated view - now aligned with frontend expectations
      * @returns {Array} Array of BpmnBlockOverlayReport objects
      */
     getAggregatedOverlay() {
@@ -142,20 +142,20 @@ class AggregatedBpmnModel extends BpmnModel {
                 
                 if (stats && stats.deviationRate > 0) {
                     const color = this._getAggregatedColor(stats);
-                    const flags = this._getAggregatedFlags(stats);
+                    const deviationFlags = this._getDeviationFlags(stats);
                     
                     result.push(new BpmnBlockOverlayReport(
                         this.perspective_name, 
                         element.id, 
                         color, 
-                        flags
+                        deviationFlags
                     ));
                 } else {
                     // No deviations for this stage - show as normal
                     result.push(new BpmnBlockOverlayReport(
                         this.perspective_name, 
                         element.id, 
-                        'GREEN', 
+                        null, // Green/normal color
                         []
                     ));
                 }
@@ -166,78 +166,91 @@ class AggregatedBpmnModel extends BpmnModel {
     }
 
     /**
+     * Get deviation flags that match frontend expectations
+     * Each flag represents a deviation type with its count and details
+     * @param {Object} stats Aggregated statistics
+     * @returns {Array} Array of deviation flag objects matching frontend format
+     */
+    _getDeviationFlags(stats) {
+        const deviationFlags = [];
+        
+        // Convert each deviation type to a flag with count
+        for (const [deviationType, count] of stats.counts.entries()) {
+            if (count > 0) {
+                const severity = this._calculateDeviationSeverity(count, stats.totalInstances);
+                
+                deviationFlags.push({
+                    deviation: deviationType, // This matches what frontend expects
+                    details: {
+                        count: count,
+                        severity: severity,
+                        percentage: Math.round((count / stats.totalInstances) * 100),
+                        totalInstances: stats.totalInstances,
+                        description: this._getDeviationDescription(deviationType, count, stats.totalInstances)
+                    }
+                });
+            }
+        }
+        
+        return deviationFlags;
+    }
+
+    /**
+     * Calculate severity for a specific deviation type based on its frequency
+     * @param {number} count Number of times this deviation occurred
+     * @param {number} totalInstances Total number of instances for this stage
+     * @returns {string} Severity level
+     */
+    _calculateDeviationSeverity(count, totalInstances) {
+        const percentage = (count / totalInstances) * 100;
+        if (percentage >= 75) return 'CRITICAL';
+        if (percentage >= 50) return 'HIGH';
+        if (percentage >= 25) return 'MEDIUM';
+        return 'LOW';
+    }
+
+    /**
+     * Get human-readable description for deviation
+     * @param {string} deviationType Type of deviation
+     * @param {number} count Number of occurrences
+     * @param {number} totalInstances Total instances
+     * @returns {string} Description text
+     */
+    _getDeviationDescription(deviationType, count, totalInstances) {
+        const percentage = Math.round((count / totalInstances) * 100);
+        
+        const descriptions = {
+            'SKIPPED': `Skipped in ${count} out of ${totalInstances} instances (${percentage}%)`,
+            'OVERLAP': `Overlapping execution in ${count} out of ${totalInstances} instances (${percentage}%)`,
+            'INCOMPLETE': `Incomplete execution in ${count} out of ${totalInstances} instances (${percentage}%)`,
+            'MULTI_EXECUTION': `Multiple executions in ${count} out of ${totalInstances} instances (${percentage}%)`,
+            'INCORRECT_EXECUTION': `Incorrect execution order in ${count} out of ${totalInstances} instances (${percentage}%)`,
+            'INCORRECT_BRANCH': `Wrong branch taken in ${count} out of ${totalInstances} instances (${percentage}%)`
+        };
+        
+        return descriptions[deviationType] || `${deviationType} occurred ${count} times (${percentage}%)`;
+    }
+
+    /**
      * Get color based on aggregated severity
      * @param {Object} stats Aggregated statistics
-     * @returns {string} Color code
+     * @returns {Object} Color object with stroke and fill properties
      */
     _getAggregatedColor(stats) {
         const severity = this._calculateSeverity(stats.deviationRate);
-        switch (severity) {
-            case 'CRITICAL': return 'DARK_RED';
-            case 'HIGH': return 'RED';
-            case 'MEDIUM': return 'ORANGE';
-            case 'LOW': return 'YELLOW';
-            default: return 'GREEN';
-        }
-    }
-
-    /**
-     * Get flags for aggregated display
-     * @param {Object} stats Aggregated statistics
-     * @returns {Array} Array of flag objects
-     */
-    _getAggregatedFlags(stats) {
-        const flags = [];
         
-        // Add deviation rate flag
-        flags.push({
-            type: 'DEVIATION_RATE',
-            value: `${stats.deviationRate.toFixed(1)}%`,
-            severity: this._calculateSeverity(stats.deviationRate),
-            description: `${stats.instancesWithDeviations.size}/${stats.totalInstances} instances affected`
-        });
-
-        // Add predominant deviation type if exists
-        const predominant = this._getPredominantDeviation(stats.counts);
-        if (predominant !== 'NONE') {
-            const predominantCount = stats.counts.get(predominant);
-            flags.push({
-                type: 'PREDOMINANT_DEVIATION',
-                value: this._formatDeviationType(predominant),
-                count: predominantCount,
-                description: `Most common: ${predominantCount} occurrences`
-            });
+        switch (severity) {
+            case 'CRITICAL': 
+                return { stroke: null, fill: '#FFB6C1' }; // Only fill, no stroke change
+            case 'HIGH': 
+                return { stroke: null, fill: '#FFB6C1' }; // Only fill, no stroke change
+            case 'MEDIUM': 
+                return { stroke: null, fill: '#FFE4B5' }; // Only fill, no stroke change
+            case 'LOW': 
+                return { stroke: null, fill: '#FFFFE0' }; // Only fill, no stroke change
+            default: 
+                return { stroke: null, fill: '#90EE90' }; // Light green for no deviations
         }
-
-        // Add breakdown of top deviation types (max 3)
-        const breakdown = this._getDeviationBreakdown(stats.counts);
-        if (breakdown.length > 1) {
-            const topDeviations = breakdown.slice(0, 3);
-            flags.push({
-                type: 'DEVIATION_BREAKDOWN',
-                value: topDeviations.map(d => `${this._formatDeviationType(d.type)}: ${d.percentage}%`).join(', '),
-                description: 'Deviation type distribution'
-            });
-        }
-
-        return flags;
-    }
-
-    /**
-     * Format deviation type for display
-     * @param {string} type Deviation type
-     * @returns {string} Formatted type
-     */
-    _formatDeviationType(type) {
-        const typeMap = {
-            'SKIPPED': 'Skip',
-            'OVERLAP': 'Overlap',
-            'INCOMPLETE': 'Incomplete',
-            'MULTI_EXECUTION': 'Multi-exec',
-            'INCORRECT_EXECUTION': 'Wrong sequence',
-            'INCORRECT_BRANCH': 'Wrong branch'
-        };
-        return typeMap[type] || type;
     }
 
     /**
@@ -249,6 +262,7 @@ class AggregatedBpmnModel extends BpmnModel {
         let stagesWithDeviations = 0;
         let totalDeviationRate = 0;
         let severityCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 };
+        const stageDetails = {};
 
         for (const [stageId, stats] of this.aggregatedData.entries()) {
             totalStages++;
@@ -259,6 +273,15 @@ class AggregatedBpmnModel extends BpmnModel {
             
             const severity = this._calculateSeverity(stats.deviationRate);
             severityCounts[severity]++;
+
+            // Add stage details for frontend tooltip use
+            stageDetails[stageId] = {
+                totalInstances: stats.totalInstances,
+                instancesWithDeviations: stats.instancesWithDeviations.size,
+                deviationRate: stats.deviationRate,
+                deviationCounts: Object.fromEntries(stats.counts),
+                severity: severity
+            };
         }
 
         return {
@@ -267,7 +290,8 @@ class AggregatedBpmnModel extends BpmnModel {
             stagesWithDeviations,
             stagesWithoutDeviations: totalStages - stagesWithDeviations,
             averageDeviationRate: stagesWithDeviations > 0 ? (totalDeviationRate / stagesWithDeviations) : 0,
-            severityDistribution: severityCounts
+            severityDistribution: severityCounts,
+            stageDetails // This enables the frontend tooltips
         };
     }
 }
