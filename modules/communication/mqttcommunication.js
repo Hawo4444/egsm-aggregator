@@ -107,21 +107,20 @@ function onMessageReceived(hostname, port, topic, message) {
                 break;
             }
             case 'GET_COMPLETE_JOB_DATA': {
-                const job = MonitoringManager.getInstance().getJob(message.job_id);
+                const job = MONITORING_MANAGER.getJob(msgJson['job_id']);
                 let responseData = 'not_found';
 
-                if (job && job.type === 'process-deviation-aggregation') {
+                if (job && job.job_type === 'process-deviation-aggregation') {
                     responseData = job.getCompleteAggregationData();
                 }
 
                 const response = {
-                    request_id: message.request_id,
+                    request_id: msgJson['request_id'],
                     message_type: 'GET_COMPLETE_JOB_DATA_RESPONSE',
                     sender_id: CONNCONFIG.getConfig().self_id,
-                    data: responseData
+                    payload: responseData
                 };
-
-                publishTopic('aggregators_to_supervisor', JSON.stringify(response));
+                MQTT.publishTopic(MQTT_HOST, MQTT_PORT, AGGREGATORS_TO_SUPERVISORS, JSON.stringify(response))
                 break;
             }
         }

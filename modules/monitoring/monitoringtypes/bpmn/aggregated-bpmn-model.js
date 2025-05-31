@@ -34,14 +34,39 @@ class AggregatedBpmnModel extends BpmnModel {
      * @param {BpmnBlock} construct The BPMN construct to update
      * @param {Object} stats Aggregated statistics for this stage
      */
-    _applyStatisticsToConstruct(construct, stats) {                
+    _applyStatisticsToConstruct(construct, stats) {
+        // Calculate severity based on deviation rate
+        const severity = this._calculateSeverity(stats.deviationRate);
+        
+        // Set aggregated status based on predominant deviation types
+        const predominantDeviation = this._getPredominantDeviation(stats.counts);
+        
+        // Store aggregated information on the construct
         construct.aggregatedStats = {
             deviationRate: stats.deviationRate,
             totalInstances: stats.totalInstances,
             instancesWithDeviations: stats.instancesWithDeviations.size,
+            predominantDeviation,
+            severity,
             deviationCounts: Object.fromEntries(stats.counts),
             deviationBreakdown: this._getDeviationBreakdown(stats.counts)
         };
+
+        // Set construct status based on aggregated data
+        construct.aggregatedStatus = this._getAggregatedStatus(stats);
+    }
+
+    /**
+     * Calculate severity level based on deviation rate
+     * @param {number} deviationRate Percentage of instances with deviations
+     * @returns {string} Severity level
+     */
+    _calculateSeverity(deviationRate) {
+        if (deviationRate >= 75) return 'CRITICAL';
+        if (deviationRate >= 50) return 'HIGH';
+        if (deviationRate >= 25) return 'MEDIUM';
+        if (deviationRate > 0) return 'LOW';
+        return 'NONE';
     }
 
     /**
@@ -85,6 +110,19 @@ class AggregatedBpmnModel extends BpmnModel {
 
         // Sort by count descending
         return breakdown.sort((a, b) => b.count - a.count);
+    }
+
+    /**
+     * Get aggregated status for a construct
+     * @param {Object} stats Aggregated statistics
+     * @returns {string} Status string
+     */
+    _getAggregatedStatus(stats) {
+        if (stats.deviationRate === 0) return 'NORMAL';
+        if (stats.deviationRate >= 75) return 'CRITICAL_DEVIATIONS';
+        if (stats.deviationRate >= 50) return 'HIGH_DEVIATIONS';
+        if (stats.deviationRate >= 25) return 'MEDIUM_DEVIATIONS';
+        return 'LOW_DEVIATIONS';
     }
 
     /**
