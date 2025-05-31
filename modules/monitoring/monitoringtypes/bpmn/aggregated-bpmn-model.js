@@ -140,22 +140,23 @@ class AggregatedBpmnModel extends BpmnModel {
                 const stageId = element.id;
                 const stats = this.aggregatedData.get(stageId);
                 
-                if (stats && stats.deviationRate > 0) {
+                if (stats) {
+                    // Always return a color - green for no deviations, others for deviations
                     const color = this._getAggregatedColor(stats);
-                    const deviationFlags = this._getDeviationFlags(stats);
+                    const deviationFlags = stats.deviationRate > 0 ? this._getDeviationFlags(stats) : [];
                     
                     result.push(new BpmnBlockOverlayReport(
                         this.perspective_name, 
                         element.id, 
-                        color, 
+                        color,
                         deviationFlags
                     ));
                 } else {
-                    // No deviations for this stage - show as normal
+                    // No stats available - default to green
                     result.push(new BpmnBlockOverlayReport(
                         this.perspective_name, 
                         element.id, 
-                        null, // Green/normal color
+                        { fill: '#90EE90' }, // Default green
                         []
                     ));
                 }
@@ -180,8 +181,8 @@ class AggregatedBpmnModel extends BpmnModel {
                 const severity = this._calculateDeviationSeverity(count, stats.totalInstances);
                 
                 deviationFlags.push({
-                    deviation: deviationType, // This matches what frontend expects
-                    details: {
+                    deviation: deviationType // This matches what frontend expects
+                    , details: {
                         count: count,
                         severity: severity,
                         percentage: Math.round((count / stats.totalInstances) * 100),
@@ -234,22 +235,23 @@ class AggregatedBpmnModel extends BpmnModel {
     /**
      * Get color based on aggregated severity
      * @param {Object} stats Aggregated statistics
-     * @returns {Object} Color object with stroke and fill properties
+     * @returns {Object} Color object with fill property
      */
     _getAggregatedColor(stats) {
         const severity = this._calculateSeverity(stats.deviationRate);
         
         switch (severity) {
             case 'CRITICAL': 
-                return { stroke: null, fill: '#FFB6C1' }; // Only fill, no stroke change
+                return { fill: '#FF6B6B' }; // Red for critical
             case 'HIGH': 
-                return { stroke: null, fill: '#FFB6C1' }; // Only fill, no stroke change
+                return { fill: '#FF9F43' }; // Orange for high
             case 'MEDIUM': 
-                return { stroke: null, fill: '#FFE4B5' }; // Only fill, no stroke change
+                return { fill: '#FFC048' }; // Yellow for medium
             case 'LOW': 
-                return { stroke: null, fill: '#FFFFE0' }; // Only fill, no stroke change
+                return { fill: '#F7DC6F' }; // Light yellow for low
+            case 'NONE':
             default: 
-                return { stroke: null, fill: '#90EE90' }; // Light green for no deviations
+                return { fill: '#90EE90' }; // Light green for no deviations
         }
     }
 
