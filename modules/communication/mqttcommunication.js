@@ -80,7 +80,7 @@ function onMessageReceived(hostname, port, topic, message) {
                     }
                     MQTT.publishTopic(MQTT_HOST, MQTT_PORT, AGGREGATORS_TO_SUPERVISORS, JSON.stringify(response))
                 }
-                break
+                break;
             }
             case 'SEARCH': {
                 LOG.logWorker('DEBUG', `SEARCH requested for ${msgJson['payload']['job_id']}`, module.id)
@@ -93,7 +93,36 @@ function onMessageReceived(hostname, port, topic, message) {
                     }
                     MQTT.publishTopic(MQTT_HOST, MQTT_PORT, AGGREGATORS_TO_SUPERVISORS, JSON.stringify(response))
                 }
-                break
+                break;
+            }
+            case 'GET_DEVIATION_AGGREGATORS': {
+                LOG.logWorker('DEBUG', 'GET_DEVIATION_AGGREGATORS requested', module.id)
+                var response = {
+                    request_id: msgJson['request_id'],
+                    message_type: 'GET_DEVIATION_AGGREGATORS_RESP',
+                    sender_id: CONNCONFIG.getConfig().self_id,
+                    payload: MONITORING_MANAGER.getDeviationAggregationJobs()
+                }
+                MQTT.publishTopic(MQTT_HOST, MQTT_PORT, AGGREGATORS_TO_SUPERVISORS, JSON.stringify(response))
+                break;
+            }
+            case 'GET_COMPLETE_JOB_DATA': {
+                const job = MonitoringManager.getInstance().getJob(message.job_id);
+                let responseData = 'not_found';
+
+                if (job && job.type === 'process-deviation-aggregation') {
+                    responseData = job.getCompleteAggregationData();
+                }
+
+                const response = {
+                    request_id: message.request_id,
+                    message_type: 'GET_COMPLETE_JOB_DATA_RESPONSE',
+                    sender_id: CONNCONFIG.getConfig().self_id,
+                    data: responseData
+                };
+
+                publishTopic('aggregators_to_supervisor', JSON.stringify(response));
+                break;
             }
         }
     } else if (topic == WORKERS_TO_AGGREGATORS) {

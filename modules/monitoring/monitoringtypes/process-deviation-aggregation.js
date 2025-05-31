@@ -1,5 +1,5 @@
 const { Job } = require('./job');
-const { BpmnModel } = require('./bpmn/bpmn-model');
+const { AggregatedBpmnModel } = require('./bpmn/aggregated-bpmn-model');
 const { SkipDeviation, OverlapDeviation, IncorrectExecutionSequenceDeviation,
     IncompleteDeviation, MultiExecutionDeviation, IncorrectBranchDeviation } = require('./bpmn/process-perspective');
 const DDB = require('../../egsm-common/database/databaseconnector');
@@ -22,9 +22,12 @@ class ProcessDeviationAggregation extends Job {
         super(id, 'process-deviation-aggregation', brokers, owner, [], [], [], notificationrules, notificationmanager);
         this.processType = processType;
         this.perspectives = new Map();
+        this.bpmnModels = new Map(); // perspective => AggregatedBpmnModel
 
         for (const [_, perspectiveData] of perspectives.entries()) {
             this.perspectives.set(perspectiveData.name, perspectiveData);
+            this.bpmnModels.set(perspectiveData.name,
+                new AggregatedBpmnModel(perspectiveData.name, perspectiveData.bpmn_diagram));
         }
 
         this.deviationData = new Map(); // perspective => instance => deviations[]
@@ -121,6 +124,11 @@ class ProcessDeviationAggregation extends Job {
                 : 0,
             lastUpdated: Date.now()
         });
+
+        const bpmnModel = this.bpmnModels.get(perspectiveName);
+        if (bpmnModel) {
+            bpmnModel.applyAggregatedStatistics(stageMap);
+        }
     }
 
     _groupDeviationsByStage(deviations) {
@@ -163,6 +171,55 @@ class ProcessDeviationAggregation extends Job {
         }
     }
 
+    /**
+     * Handle external requests for aggregation data (similar to BpmnJob)
+     * @param {Object} request Request object
+     * @returns {Object} Response with requested data
+     */
+    handleExternalRequest(request) {
+        switch (request.type) {
+            case 'GET_COMPLETE_DATA':
+                return this.getCompleteAggregationData();
+            case 'GET_STAGE_DETAILS':
+                return this.getStageDetails(request.perspectiveName, request.stageId);
+            case 'GET_SUMMARY':
+                return this.getAggregatedSummary();
+            default:
+                return { error: 'Unknown request type' };
+        }
+    }
+
+    /**
+     * Get aggregated summary across all perspectives
+     * @returns {Object} Summary data
+     */
+    getAggregatedSummary() {
+        const perspectiveSummaries = [];
+
+        for (const [perspectiveName, model] of this.bpmnModels.entries()) {
+            const perspectiveSummary = this.perspectiveSummary.get(perspectiveName);
+            const bpmnSummary = model.getAggregatedSummary();
+
+            perspectiveSummaries.push({
+                ...perspectiveSummary,
+                ...bpmnSummary
+            });
+        }
+
+        return {
+            perspectives: perspectiveSummaries,
+            overall: this._calculateOverallSummary(perspectiveSummaries)
+        };
+    }
+
+    /**
+     * Trigger complete update event for WebSocket clients (like BpmnJob)
+     */
+    triggerCompleteUpdateEvent() {
+        const updateData = this.getCompleteAggregationData();
+        this.eventEmitter.emit('job-update', updateData);
+    }
+
     async _updateInMemoryStructures(perspectiveName, instanceId, newDeviations) {
         try {
             if (!this.perspectives.has(perspectiveName)) {
@@ -187,13 +244,122 @@ class ProcessDeviationAggregation extends Job {
             const perspectiveInfo = this.perspectives.get(perspectiveName);
             this._buildAggregatedStructures(perspectiveName, perspectiveData, allInstances, perspectiveInfo);
             console.log(`Updated in-memory structures for perspective: ${perspectiveName}`);
+
+            // Trigger update for WebSocket clients after data update
+            this.triggerCompleteUpdateEvent();
+
         } catch (error) {
             console.error(`Failed to update in-memory structures: ${error.message}`);
         }
     }
 
-    getAggregatedOverlay() {
-        // Return BPMN overlay with aggregated deviation data
+    /**
+     * Get complete aggregation data including diagrams, overlays, and summary
+     * @returns {Object} Complete aggregation data
+     */
+    getCompleteAggregationData() {
+        const overlays = [];
+        const perspectives = [];
+        const perspectiveSummaries = [];
+
+        for (const [perspectiveName, model] of this.bpmnModels.entries()) {
+            // Get BPMN diagram
+            perspectives.push({
+                name: perspectiveName,
+                bpmn_xml: model.model_xml
+            });
+
+            // Get overlays
+            const stageData = this.stageAggregatedData.get(perspectiveName);
+            if (stageData) {
+                model.applyAggregatedStatistics(stageData);
+                overlays.push(...model.getAggregatedOverlay());
+            }
+
+            // Get perspective summary
+            const perspectiveSummary = this.perspectiveSummary.get(perspectiveName);
+            const bpmnSummary = model.getAggregatedSummary();
+
+            perspectiveSummaries.push({
+                ...perspectiveSummary,
+                ...bpmnSummary
+            });
+        }
+
+        return {
+            job_id: this.id,
+            job_type: 'process-deviation-aggregation',
+            process_type: this.processType,
+            perspectives: perspectives,
+            overlays: overlays,
+            summary: {
+                perspectives: perspectiveSummaries,
+                overall: this._calculateOverallSummary(perspectiveSummaries)
+            },
+            type: 'COMPLETE_AGGREGATION',
+            timestamp: Date.now()
+        };
+    }
+
+    /**
+     * Calculate overall summary across all perspectives
+     * @param {Array} perspectiveSummaries Individual perspective summaries
+     * @returns {Object} Overall summary
+     */
+    _calculateOverallSummary(perspectiveSummaries) {
+        if (perspectiveSummaries.length === 0) return {};
+
+        const overall = {
+            totalPerspectives: perspectiveSummaries.length,
+            averageDeviationRate: 0,
+            totalInstances: 0,
+            totalDeviations: 0,
+            severityDistribution: { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 }
+        };
+
+        perspectiveSummaries.forEach(summary => {
+            overall.averageDeviationRate += summary.overallDeviationRate || 0;
+            overall.totalInstances = Math.max(overall.totalInstances, summary.totalInstances || 0);
+            overall.totalDeviations += summary.totalDeviations || 0;
+
+            if (summary.severityDistribution) {
+                Object.keys(overall.severityDistribution).forEach(severity => {
+                    overall.severityDistribution[severity] += summary.severityDistribution[severity] || 0;
+                });
+            }
+        });
+
+        overall.averageDeviationRate = overall.averageDeviationRate / perspectiveSummaries.length;
+
+        return overall;
+    }
+
+    /**
+     * Get detailed breakdown for a specific stage
+     * @param {string} perspectiveName Perspective name
+     * @param {string} stageId Stage ID
+     * @returns {Object} Detailed stage information
+     */
+    getStageDetails(perspectiveName, stageId) {
+        const stageData = this.stageAggregatedData.get(perspectiveName)?.get(stageId);
+        const instanceLookup = this.stageInstanceLookup.get(perspectiveName)?.get(stageId);
+
+        if (!stageData) {
+            return null;
+        }
+
+        return {
+            stageId,
+            perspectiveName,
+            totalInstances: stageData.totalInstances,
+            instancesWithDeviations: stageData.instancesWithDeviations.size,
+            deviationRate: stageData.deviationRate,
+            deviationCounts: Object.fromEntries(stageData.counts),
+            affectedInstances: Array.from(stageData.instancesWithDeviations),
+            recentDeviations: stageData.deviations
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .slice(0, 10) // Last 10 deviations
+        };
     }
 
     _getRelevantBlockIds(deviation) {

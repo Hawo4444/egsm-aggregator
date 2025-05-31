@@ -60,13 +60,13 @@ class JobFactory {
                     var monitored = config['monitored']
                     var notificationrules = config['notificationrules']
                     var perspectives = config['perspectives']
-                    return new BpmnJob(config['id'], brokers, owner, monitored, [], notificationrules, this.notification_manager, perspectives)
+                    return new BpmnJob(id, brokers, owner, monitored, [], notificationrules, this.notification_manager, perspectives)
                 }
                 case 'real-time-process-aggregation': {
                     var brokers = [CONNCONF.getConfig().primary_broker]
                     var processtype = config['processtype']
                     var notificationrules = config['notificationrules']
-                    return new RealTimeProcessAggregation(config['id'], brokers, owner, processtype, notificationrules, this.notification_manager)
+                    return new RealTimeProcessAggregation(id, brokers, owner, processtype, notificationrules, this.notification_manager)
                 }
                 case 'process-deviation-aggregation': {
                     var brokers = [CONNCONF.getConfig().primary_broker]
