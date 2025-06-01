@@ -229,18 +229,18 @@ async function initPrimaryBrokerConnection(broker) {
     //Find an unused, unique ID for the Engine
     while (true) {
         var topicSelf = UUID.v4();
-        MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, topicSelf)
+        await MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, topicSelf)
         var result = await checkIdCandidate(topicSelf)
         if (result == 'ok') {
             break;
         }
         else {
-            MQTT.unsubscribeTopic(MQTT_HOST, MQTT_PORT, topicSelf)
+            await MQTT.unsubscribeTopic(MQTT_HOST, MQTT_PORT, topicSelf)
         }
     }
-    MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, WORKERS_TO_AGGREGATORS)
-    MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, SUPERVISOR_TO_AGGREGATORS)
-    MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, AGGREGATORS_TO_AGGREGATORS, false)
+    await MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, WORKERS_TO_AGGREGATORS)
+    await MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, SUPERVISOR_TO_AGGREGATORS)
+    await MQTT.subscribeTopic(MQTT_HOST, MQTT_PORT, AGGREGATORS_TO_AGGREGATORS, false)
     return topicSelf
 }
 

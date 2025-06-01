@@ -144,7 +144,7 @@ class BpmnJob extends Job {
     const deviationMessage = {
       request_id: require('uuid').v4(),
       message_type: 'PROCESS_DEVIATIONS',
-      sender_id: require('../../../egsm-common/config/connectionconfig').getConfig().self_id, // Add this
+      sender_id: require('../../../egsm-common/config/connectionconfig').getConfig().self_id,
       payload: {
         process_type: messageObj.process_type,
         process_id: messageObj.process_id,

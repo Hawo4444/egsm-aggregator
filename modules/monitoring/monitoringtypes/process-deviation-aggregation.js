@@ -194,26 +194,46 @@ class ProcessDeviationAggregation extends Job {
      * @returns {Object} Summary data
      */
     getAggregatedSummary() {
-        const perspectiveSummaries = [];
+        let totalStages = 0;
+        let stagesWithDeviations = 0;
+        let totalDeviationRate = 0;
+        let severityCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 };
+        const stageDetails = {};
 
-        for (const [perspectiveName, model] of this.bpmnModels.entries()) {
-            const perspectiveSummary = this.perspectiveSummary.get(perspectiveName);
-            const bpmnSummary = model.getAggregatedSummary();
+        for (const [stageId, stats] of this.aggregatedData.entries()) {
+            totalStages++;
+            if (stats.deviationRate > 0) {
+                stagesWithDeviations++;
+                totalDeviationRate += stats.deviationRate;
+            }
+            
+            const severity = this._calculateSeverity(stats.deviationRate);
+            severityCounts[severity]++;
 
-            perspectiveSummaries.push({
-                ...perspectiveSummary,
-                ...bpmnSummary
-            });
+            // Add stage details for frontend tooltip use - fix the instancesWithDeviations field
+            stageDetails[stageId] = {
+                totalInstances: stats.totalInstances,
+                instancesWithDeviations: stats.instancesWithDeviations instanceof Set ? 
+                    stats.instancesWithDeviations.size : stats.instancesWithDeviations,
+                deviationRate: stats.deviationRate,
+                deviationCounts: Object.fromEntries(stats.counts),
+                severity: severity
+            };
         }
 
         return {
-            perspectives: perspectiveSummaries,
-            overall: this._calculateOverallSummary(perspectiveSummaries)
+            perspective: this.perspective_name,
+            totalStages,
+            stagesWithDeviations,
+            stagesWithoutDeviations: totalStages - stagesWithDeviations,
+            averageDeviationRate: stagesWithDeviations > 0 ? (totalDeviationRate / stagesWithDeviations) : 0,
+            severityDistribution: severityCounts,
+            stageDetails // This enables the frontend tooltips
         };
     }
 
     /**
-     * Trigger complete update event for WebSocket clients (like BpmnJob)
+     * Trigger complete update event for WebSocket clients
      */
     triggerCompleteUpdateEvent() {
         const updateData = this.getCompleteAggregationData();
@@ -232,6 +252,13 @@ class ProcessDeviationAggregation extends Job {
             }
 
             const perspectiveData = this.deviationData.get(perspectiveName);
+            const existingData = perspectiveData[instanceId];
+
+            if (existingData && this._deviationsEqual(existingData.deviations, newDeviations)) {
+                console.log(`No changes detected for instance ${instanceId} in perspective ${perspectiveName}, skipping update`);
+                return;
+            }
+
             perspectiveData[instanceId] = {
                 instanceId: instanceId,
                 processType: this.processType,
@@ -245,12 +272,35 @@ class ProcessDeviationAggregation extends Job {
             this._buildAggregatedStructures(perspectiveName, perspectiveData, allInstances, perspectiveInfo);
             console.log(`Updated in-memory structures for perspective: ${perspectiveName}`);
 
-            // Trigger update for WebSocket clients after data update
             this.triggerCompleteUpdateEvent();
 
         } catch (error) {
             console.error(`Failed to update in-memory structures: ${error.message}`);
         }
+    }
+
+    /**
+     * Compare two deviation arrays to check if they're equal
+     * @param {Array} deviations1 First deviation array
+     * @param {Array} deviations2 Second deviation array
+     * @returns {boolean} True if arrays are equal
+     */
+    _deviationsEqual(deviations1, deviations2) {
+        if (!deviations1 && !deviations2) return true;
+        if (!deviations1 || !deviations2) return false;
+        if (deviations1.length !== deviations2.length) return false;
+
+        // Sort both arrays by a consistent property
+        const sorted1 = [...deviations1].sort((a, b) => `${a.type}_${a.block_a}`.localeCompare(`${b.type}_${b.block_a}`));
+        const sorted2 = [...deviations2].sort((a, b) => `${a.type}_${a.block_a}`.localeCompare(`${b.type}_${b.block_a}`));
+
+        return sorted1.every((dev1, index) => {
+            const dev2 = sorted2[index];
+            return dev1.type === dev2.type &&
+                   dev1.block_a === dev2.block_a &&
+                   dev1.block_b === dev2.block_b &&
+                   JSON.stringify(dev1.details) === JSON.stringify(dev2.details);
+        });
     }
 
     /**

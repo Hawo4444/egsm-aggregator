@@ -29,10 +29,10 @@ var MONITORED_BROKERS = new Set() //HOST:PORT
  * Adding a new Broker to the set of observed Brokers
  * @param {Broker} broker New Broker object to include in the observation 
  */
-function addMonitoredBroker(broker) {
+async function addMonitoredBroker(broker) {
     LOG.logSystem('DEBUG', `Adding monitored broker: ${broker.host}:${broker.port}`, module.id)
     MQTT.createConnection(broker.host, broker.port, broker.username, broker.password, 'aggregator-agent-' + UUID.v4())
-    MQTT.subscribeTopic(broker.host, broker.port, TOPIC_PROCESS_LIFECYCLE)
+    await MQTT.subscribeTopic(broker.host, broker.port, TOPIC_PROCESS_LIFECYCLE)
     MONITORED_BROKERS.add(broker.host + ':' + broker.port)
 }
 
@@ -109,11 +109,11 @@ async function addProcess(instance_id, onchange) {
 
         ENGINES.set(instance_id, { hostname: hostname, port: port, onchange: new Set([onchange]) })
         if (!MONITORED_BROKERS.has(hostname + ':' + port.toString())) {
-            addMonitoredBroker(broker)
+            await addMonitoredBroker(broker)
         }
-        MQTT.subscribeTopic(hostname, port, instance_id + '/stage_log')
-        MQTT.subscribeTopic(hostname, port, instance_id + '/artifact_log')
-        MQTT.subscribeTopic(hostname, port, instance_id + '/adhoc')
+        await MQTT.subscribeTopic(hostname, port, instance_id + '/stage_log')
+        await MQTT.subscribeTopic(hostname, port, instance_id + '/artifact_log')
+        await MQTT.subscribeTopic(hostname, port, instance_id + '/adhoc')
     }
     else {
         LOG.logWorker('DEBUG', `Process [${instance_id}] is already registered`, module.id)
