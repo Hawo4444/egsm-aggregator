@@ -122,7 +122,15 @@ class MonitoringManager {
         let jobs = []
         for (let [_, value] of this.jobs) {
             if (value.job_type === 'process-deviation-aggregation') {
-                jobs.push(value)
+                jobs.push({
+                    id: value.id,
+                    job_type: value.job_type,
+                    processType: value.processType,
+                    brokers: [{
+                        host: CONNCONFIG.getConfig().socket_host,
+                        port: CONNCONFIG.getConfig().socket_port
+                    }]
+                })
             }
         }
         return jobs
