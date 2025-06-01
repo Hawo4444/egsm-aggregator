@@ -158,9 +158,9 @@ class ProcessDeviationAggregation extends Job {
     }
 
     /**
-       * Called automatically when a process event received from the monitored process 
-       * @param {Object} messageObj received process event object 
-       */
+    * Called automatically when a process event received from the monitored process 
+    * @param {Object} messageObj received process event object 
+    */
     async handleDeviations(messageObj) {
         try {
             DDB.storeProcessDeviations(this.processType, messageObj.process_id, messageObj.process_perspective, messageObj.deviations)
@@ -172,7 +172,131 @@ class ProcessDeviationAggregation extends Job {
     }
 
     /**
-     * Handle external requests for aggregation data (similar to BpmnJob)
+    * Handle new process instance notification
+    * @param {string} instanceId New instance ID
+    */
+    async handleNewInstance(instanceId) {
+        try {
+            console.log(`New process instance detected: ${instanceId} for process type: ${this.processType}`);
+
+            // Add the new instance to our tracking for all perspectives
+            for (const [perspectiveName, _] of this.perspectives.entries()) {
+                if (!this.deviationData.has(perspectiveName)) {
+                    this.deviationData.set(perspectiveName, {});
+                }
+
+                // Add instance with empty deviations initially
+                this.deviationData.get(perspectiveName)[instanceId] = {
+                    instanceId: instanceId,
+                    processType: this.processType,
+                    perspective: perspectiveName,
+                    deviations: [],
+                    timestamp: Math.floor(Date.now() / 1000)
+                };
+            }
+
+            // Calculate new total instance count efficiently
+            const samplePerspective = this.perspectives.keys().next().value;
+            const existingInstances = Object.keys(this.deviationData.get(samplePerspective) || {});
+            const totalInstanceCount = existingInstances.length;
+
+            for (const [perspectiveName, perspectiveInfo] of this.perspectives.entries()) {
+                const perspectiveData = this.deviationData.get(perspectiveName) || {};
+                this._buildAggregatedStructuresWithCount(perspectiveName, perspectiveData, totalInstanceCount, perspectiveInfo);
+            }
+
+            this.triggerCompleteUpdateEvent();
+            console.log(`Successfully added instance ${instanceId} to aggregation tracking (total: ${totalInstanceCount})`);
+        } catch (error) {
+            console.error(`Failed to handle new instance: ${error.message}`);
+        }
+    }
+
+    /**
+     * Build aggregated structures with known instance count (optimization for new instances)
+     * @param {string} perspectiveName Name of the perspective
+     * @param {Object} instanceDeviations Deviation data for instances
+     * @param {number} totalInstanceCount Total number of instances
+     * @param {Object} perspectiveData Perspective configuration
+     */
+    _buildAggregatedStructuresWithCount(perspectiveName, instanceDeviations, totalInstanceCount, perspectiveData) {
+        const stageMap = new Map();
+        const instanceLookup = new Map();
+        let totalDeviations = 0;
+
+        const allStages = perspectiveData.egsm_stages;
+
+        // Initialize all stages with known instance count
+        allStages.forEach(stageName => {
+            stageMap.set(stageName, {
+                totalInstances: totalInstanceCount, // Use provided count instead of querying
+                instancesWithDeviations: new Set(),
+                deviations: [],
+                counts: new Map(),
+                deviationRate: 0
+            });
+            instanceLookup.set(stageName, new Map());
+        });
+
+        // Process existing deviations (same as before)
+        for (const [instanceId, instanceData] of Object.entries(instanceDeviations)) {
+            const deviations = instanceData.deviations || [];
+            totalDeviations += deviations.length;
+
+            const deviationsByStage = this._groupDeviationsByStage(deviations);
+
+            for (const [stageName, stageDeviations] of deviationsByStage.entries()) {
+                if (stageMap.has(stageName)) {
+                    const stageData = stageMap.get(stageName);
+                    stageData.instancesWithDeviations.add(instanceId);
+
+                    stageData.deviations.push(...stageDeviations.map(dev => ({
+                        ...dev,
+                        instanceId
+                    })));
+
+                    stageDeviations.forEach(deviation => {
+                        const type = deviation.type;
+                        stageData.counts.set(type, (stageData.counts.get(type) || 0) + 1);
+                    });
+
+                    instanceLookup.get(stageName).set(instanceId, stageDeviations);
+                }
+            }
+        }
+
+        // Calculate deviation rates for each stage
+        for (const [_, stageData] of stageMap.entries()) {
+            stageData.deviationRate = stageData.totalInstances > 0
+                ? (stageData.instancesWithDeviations.size / stageData.totalInstances) * 100
+                : 0;
+        }
+
+        // Store aggregated data
+        this.stageAggregatedData.set(perspectiveName, stageMap);
+        this.stageInstanceLookup.set(perspectiveName, instanceLookup);
+
+        // Store summary with known counts
+        this.perspectiveSummary.set(perspectiveName, {
+            totalInstances: totalInstanceCount,
+            instancesWithDeviations: Object.keys(instanceDeviations).length,
+            instancesWithoutDeviations: totalInstanceCount - Object.keys(instanceDeviations).length,
+            totalDeviations,
+            stageCount: allStages.length,
+            overallDeviationRate: totalInstanceCount > 0
+                ? (Object.keys(instanceDeviations).length / totalInstanceCount) * 100
+                : 0,
+            lastUpdated: Date.now()
+        });
+
+        const bpmnModel = this.bpmnModels.get(perspectiveName);
+        if (bpmnModel) {
+            bpmnModel.applyAggregatedStatistics(stageMap);
+        }
+    }
+
+    /**
+     * Handle external requests for aggregation data
      * @param {Object} request Request object
      * @returns {Object} Response with requested data
      */
@@ -206,14 +330,14 @@ class ProcessDeviationAggregation extends Job {
                 stagesWithDeviations++;
                 totalDeviationRate += stats.deviationRate;
             }
-            
+
             const severity = this._calculateSeverity(stats.deviationRate);
             severityCounts[severity]++;
 
             // Add stage details for frontend tooltip use - fix the instancesWithDeviations field
             stageDetails[stageId] = {
                 totalInstances: stats.totalInstances,
-                instancesWithDeviations: stats.instancesWithDeviations instanceof Set ? 
+                instancesWithDeviations: stats.instancesWithDeviations instanceof Set ?
                     stats.instancesWithDeviations.size : stats.instancesWithDeviations,
                 deviationRate: stats.deviationRate,
                 deviationCounts: Object.fromEntries(stats.counts),
@@ -267,10 +391,12 @@ class ProcessDeviationAggregation extends Job {
                 timestamp: Math.floor(Date.now() / 1000)
             };
 
-            const allInstances = await DDB.readAllProcessInstances(this.processType);
+            // USE IN-MEMORY COUNT INSTEAD OF DATABASE QUERY
+            const totalInstanceCount = Object.keys(perspectiveData).length;
             const perspectiveInfo = this.perspectives.get(perspectiveName);
-            this._buildAggregatedStructures(perspectiveName, perspectiveData, allInstances, perspectiveInfo);
-            console.log(`Updated in-memory structures for perspective: ${perspectiveName}`);
+            this._buildAggregatedStructuresWithCount(perspectiveName, perspectiveData, totalInstanceCount, perspectiveInfo);
+            
+            console.log(`Updated in-memory structures for perspective: ${perspectiveName} (total instances: ${totalInstanceCount})`);
 
             this.triggerCompleteUpdateEvent();
 
@@ -297,9 +423,9 @@ class ProcessDeviationAggregation extends Job {
         return sorted1.every((dev1, index) => {
             const dev2 = sorted2[index];
             return dev1.type === dev2.type &&
-                   dev1.block_a === dev2.block_a &&
-                   dev1.block_b === dev2.block_b &&
-                   JSON.stringify(dev1.details) === JSON.stringify(dev2.details);
+                dev1.block_a === dev2.block_a &&
+                dev1.block_b === dev2.block_b &&
+                JSON.stringify(dev1.details) === JSON.stringify(dev2.details);
         });
     }
 
@@ -353,24 +479,31 @@ class ProcessDeviationAggregation extends Job {
 
     /**
      * Calculate overall summary across all perspectives
-     * @param {Array} perspectiveSummaries Individual perspective summaries
-     * @returns {Object} Overall summary
      */
     _calculateOverallSummary(perspectiveSummaries) {
         if (perspectiveSummaries.length === 0) return {};
 
+        // Use the first perspective to get instance counts (should be same across perspectives)
+        const firstPerspective = perspectiveSummaries[0];
+        
         const overall = {
             totalPerspectives: perspectiveSummaries.length,
-            averageDeviationRate: 0,
-            totalInstances: 0,
+            totalInstances: firstPerspective.totalInstances || 0,
             totalDeviations: 0,
+            instancesWithDeviations: 0,
+            instancesWithoutDeviations: 0,
+            averageDeviationRate: 0,
             severityDistribution: { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 }
         };
 
+        // Calculate totals across perspectives
+        let totalDeviationRate = 0;
         perspectiveSummaries.forEach(summary => {
-            overall.averageDeviationRate += summary.overallDeviationRate || 0;
-            overall.totalInstances = Math.max(overall.totalInstances, summary.totalInstances || 0);
             overall.totalDeviations += summary.totalDeviations || 0;
+            totalDeviationRate += summary.overallDeviationRate || 0;
+            
+            // Take maximum instances with deviations across perspectives
+            overall.instancesWithDeviations = Math.max(overall.instancesWithDeviations, summary.instancesWithDeviations || 0);
 
             if (summary.severityDistribution) {
                 Object.keys(overall.severityDistribution).forEach(severity => {
@@ -379,8 +512,10 @@ class ProcessDeviationAggregation extends Job {
             }
         });
 
-        overall.averageDeviationRate = overall.averageDeviationRate / perspectiveSummaries.length;
+        overall.instancesWithoutDeviations = overall.totalInstances - overall.instancesWithDeviations;
+        overall.averageDeviationRate = totalDeviationRate / perspectiveSummaries.length;
 
+        console.log('Overall summary calculated:', overall);
         return overall;
     }
 

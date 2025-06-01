@@ -123,6 +123,22 @@ function onMessageReceived(hostname, port, topic, message) {
                 MQTT.publishTopic(MQTT_HOST, MQTT_PORT, AGGREGATORS_TO_SUPERVISORS, JSON.stringify(response))
                 break;
             }
+            case 'NEW_PROCESS_INSTANCE': {
+                LOG.logSystem('DEBUG', `NEW_PROCESS_INSTANCE message received`, module.id)
+                if (MONITORING_MANAGER) {
+                    const processType = msgJson['payload']['process_type'];
+                    const instanceId = msgJson['payload']['process_id'];
+
+                    for (const [jobId, job] of MONITORING_MANAGER.jobs) {
+                        if (job.job_type === 'process-deviation-aggregation' &&
+                            job.processType === processType) {
+                            job.handleNewInstance(instanceId);
+                            LOG.logSystem('DEBUG', `NEW_PROCESS_INSTANCE routed to job ${jobId}`, module.id);
+                        }
+                    }
+                }
+                break;
+            }
         }
     } else if (topic == WORKERS_TO_AGGREGATORS) {
         switch (msgJson['message_type']) {
