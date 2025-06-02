@@ -13,20 +13,27 @@ const { ProcessNotification } = require('./modules/egsm-common/auxiliary/primiti
 const CONFIG_FILE = './config.xml'
 module.id = "MAIN"
 
-LOG.logSystem('DEBUG', 'Aggregator started...', module.id)
+async function startAggregator() {
+    LOG.logSystem('DEBUG', 'Aggregator started...', module.id)
 
-var filecontent = fs.readFileSync(CONFIG_FILE, 'utf8')
+    var filecontent = fs.readFileSync(CONFIG_FILE, 'utf8')
 
-CONNCONFIG.applyConfig(filecontent)
-MonitoringManager.getInstance()
+    CONNCONFIG.applyConfig(filecontent)
+    MonitoringManager.getInstance()
 
-DBCONFIG.initDatabaseConnection(CONNCONFIG.getConfig().database_host, CONNCONFIG.getConfig().database_port, CONNCONFIG.getConfig().database_region,
-    CONNCONFIG.getConfig().database_access_key_id, CONNCONFIG.getConfig().database_secret_access_key)
+    DBCONFIG.initDatabaseConnection(CONNCONFIG.getConfig().database_host, CONNCONFIG.getConfig().database_port, CONNCONFIG.getConfig().database_region,
+        CONNCONFIG.getConfig().database_access_key_id, CONNCONFIG.getConfig().database_secret_access_key)
 
-LOG.logSystem('DEBUG', 'Finding a unique ID by active cooperation with peers...', module.id)
+    LOG.logSystem('DEBUG', 'Finding a unique ID by active cooperation with peers...', module.id)
 
-MQTTCOMM.initPrimaryBrokerConnection(CONNCONFIG.getConfig().primary_broker).then((result) => {
-    CONNCONFIG.setSelfId(result)
-    LOG.logSystem('DEBUG', `Unique ID found: [${result}]`, module.id)
-    LOG.logSystem('DEBUG', 'Aggregator initialization ready!', module.id)
+    await MQTTCOMM.initPrimaryBrokerConnection(CONNCONFIG.getConfig().primary_broker).then((result) => {
+        CONNCONFIG.setSelfId(result)
+        LOG.logSystem('DEBUG', `Unique ID found: [${result}]`, module.id)
+        LOG.logSystem('DEBUG', 'Aggregator initialization ready!', module.id)
+    })
+}
+
+startAggregator().catch(error => {
+    LOG.logSystem('ERROR', `Failed to start aggregator: ${error}`, module.id)
+    process.exit(1)
 })
