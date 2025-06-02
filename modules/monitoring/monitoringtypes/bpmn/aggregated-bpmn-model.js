@@ -268,9 +268,10 @@ class AggregatedBpmnModel extends BpmnModel {
 
         for (const [stageId, stats] of this.aggregatedData.entries()) {
             totalStages++;
+            totalDeviationRate += stats.deviationRate;
+            
             if (stats.deviationRate > 0) {
                 stagesWithDeviations++;
-                totalDeviationRate += stats.deviationRate;
             }
             
             const severity = this._calculateSeverity(stats.deviationRate);
@@ -291,9 +292,9 @@ class AggregatedBpmnModel extends BpmnModel {
             totalStages,
             stagesWithDeviations,
             stagesWithoutDeviations: totalStages - stagesWithDeviations,
-            averageDeviationRate: stagesWithDeviations > 0 ? (totalDeviationRate / stagesWithDeviations) : 0,
+            averageDeviationRate: totalStages > 0 ? (totalDeviationRate / totalStages) : 0,
             severityDistribution: severityCounts,
-            stageDetails // This enables the frontend tooltips
+            stageDetails
         };
     }
 }
