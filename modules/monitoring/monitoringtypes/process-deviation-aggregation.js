@@ -41,15 +41,15 @@ class ProcessDeviationAggregation extends Job {
         try {
             for (const [perspective, perspectiveData] of this.perspectives.entries()) {
                 const perspectiveDeviations = await DDB.readAllProcessTypeDeviations(this.processType, perspective);
-                const allInstances = await DDB.readAllProcessInstances(this.processType);                
+                const allInstances = await DDB.readAllProcessInstances(this.processType);
                 const completeInstanceData = {};
-                
+
                 allInstances.forEach(instance => {
-                    const engineId = instance.instance_id;       
+                    const engineId = instance.instance_id;
                     const instanceId = this._extractInstanceId(engineId, perspective);
-                    
+
                     console.log(`   Engine ID: ${engineId} → Instance ID: ${instanceId}`);
-                    
+
                     // Only include instances for this perspective
                     if (engineId.endsWith(`__${perspective}`)) {
                         completeInstanceData[instanceId] = {
@@ -61,22 +61,21 @@ class ProcessDeviationAggregation extends Job {
                         };
                     }
                 });
-                                
+
                 // Override with actual deviation data where it exists
                 Object.entries(perspectiveDeviations).forEach(([instanceId, deviationData]) => {
                     if (completeInstanceData[instanceId]) {
                         completeInstanceData[instanceId].deviations = deviationData.deviations || [];
-                        console.log(`   Added ${deviationData.deviations?.length || 0} deviations for ${instanceId}`);
                     } else {
                         console.warn(`   Instance ${instanceId} has deviations but not found in allInstances`);
                     }
                 });
-                
+
                 this.deviationData.set(perspective, completeInstanceData);
-                                const perspectiveInstances = allInstances.filter(instance => 
+                const perspectiveInstances = allInstances.filter(instance =>
                     instance.instance_id.endsWith(`__${perspective}`)
                 );
-                
+
                 this._buildAggregatedStructures(perspective, completeInstanceData, perspectiveInstances, perspectiveData);
             }
             return true;
@@ -108,11 +107,11 @@ class ProcessDeviationAggregation extends Job {
 
         for (const [instanceId, instanceData] of Object.entries(instanceDeviations)) {
             const deviations = instanceData.deviations || [];
-            
+
             if (deviations.length > 0) {
                 actualInstancesWithDeviations++;
             }
-            
+
             totalDeviations += deviations.length;
 
             const deviationsByStage = this._groupDeviationsByStage(deviations);
@@ -220,7 +219,6 @@ class ProcessDeviationAggregation extends Job {
         }
 
         try {
-            // Add the new instance to our tracking for all perspectives
             for (const [perspectiveName, _] of this.perspectives.entries()) {
                 if (!this.deviationData.has(perspectiveName)) {
                     this.deviationData.set(perspectiveName, {});
@@ -236,7 +234,6 @@ class ProcessDeviationAggregation extends Job {
                 };
             }
 
-            // Calculate new total instance count efficiently
             const samplePerspective = this.perspectives.keys().next().value;
             const existingInstances = Object.keys(this.deviationData.get(samplePerspective) || {});
             const totalInstanceCount = existingInstances.length;
@@ -282,11 +279,11 @@ class ProcessDeviationAggregation extends Job {
         // Process existing deviations
         for (const [instanceId, instanceData] of Object.entries(instanceDeviations)) {
             const deviations = instanceData.deviations || [];
-            
+
             if (deviations.length > 0) {
                 actualInstancesWithDeviations++;
             }
-            
+
             totalDeviations += deviations.length;
 
             const deviationsByStage = this._groupDeviationsByStage(deviations);
@@ -318,7 +315,6 @@ class ProcessDeviationAggregation extends Job {
                 : 0;
         }
 
-        // Store aggregated data
         this.stageAggregatedData.set(perspectiveName, stageMap);
         this.stageInstanceLookup.set(perspectiveName, instanceLookup);
 
@@ -379,7 +375,7 @@ class ProcessDeviationAggregation extends Job {
             const severity = this._calculateSeverity(stats.deviationRate);
             severityCounts[severity]++;
 
-            // Add stage details for frontend tooltip use - fix the instancesWithDeviations field
+            // Add stage details for frontend tooltip use
             stageDetails[stageId] = {
                 totalInstances: stats.totalInstances,
                 instancesWithDeviations: stats.instancesWithDeviations instanceof Set ?
@@ -565,7 +561,6 @@ class ProcessDeviationAggregation extends Job {
      */
     getStageDetails(perspectiveName, stageId) {
         const stageData = this.stageAggregatedData.get(perspectiveName)?.get(stageId);
-        const instanceLookup = this.stageInstanceLookup.get(perspectiveName)?.get(stageId);
 
         if (!stageData) {
             return null;
@@ -585,18 +580,44 @@ class ProcessDeviationAggregation extends Job {
         };
     }
 
+    /**
+     * Get relevant block IDs for a deviation, normalizing iteration stages
+     * @param {Object} deviation Deviation object
+     * @returns {string|string[]} Stage name(s) where deviation should be tracked
+     */
     _getRelevantBlockIds(deviation) {
+        let blockIds;
+
         if (deviation.type === 'SKIPPED') {
             // Skip may have multiple stages, return all skipped stages as separate entries
-            return Array.isArray(deviation.block_a) ? deviation.block_a : [deviation.block_a];
-        }
-
-        if (deviation.type === 'OVERLAP') {
+            blockIds = Array.isArray(deviation.block_a) ? deviation.block_a : [deviation.block_a];
+        } else if (deviation.type === 'OVERLAP') {
             // For overlap deviations, the problem is with the 'open' stage (block_b)
-            return deviation.block_b;
+            blockIds = [deviation.block_b];
+        } else {
+            blockIds = [deviation.block_a];
         }
 
-        return deviation.block_a;
+        // Remove _iteration suffix to group loop and iteration deviations together
+        if (Array.isArray(blockIds)) {
+            return blockIds.map(blockId => this._normalizeStageId(blockId));
+        } else {
+            return this._normalizeStageId(blockIds);
+        }
+    }
+
+    /**
+     * Normalize stage ID by removing iteration suffix
+     * @param {string} stageId Original stage ID
+     * @returns {string} Normalized stage ID
+     */
+    _normalizeStageId(stageId) {
+        if (!stageId) return stageId;
+        if (stageId.endsWith('_iteration')) {
+            return stageId.slice(0, -10);
+        }
+
+        return stageId;
     }
 
     /**
