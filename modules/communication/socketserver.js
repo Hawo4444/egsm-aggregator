@@ -59,7 +59,7 @@ wsServer.on('request', function (request) {
     });
 
     connection.on('close', function (reasonCode, description) {
-        
+        unsubscribeAllJobs(sessionId)
         sessions.delete(sessionId)
         LOG.logSystem('DEBUG', `Peer ${connection.remoteAddress} disconnected`, module.id)
     });
@@ -71,6 +71,10 @@ async function messageHandler(message, sessionid) {
     if (msgObj['type'] == 'job_update') {
         return subscribeJobEvents(sessionid, msgObj['payload']['job_id'])
 
+    } else if (msgObj['type'] == 'job_unsubscribe') {
+        return unsubscribeJobEvents(sessionid, msgObj['payload']['job_id'])
+    } else if (msgObj['type'] == 'unsubscribe_all') {
+        return unsubscribeAllJobs(sessionid)
     }
     else if (msgObj['type'] == 'command') {
         switch (msgObj['type']) {
@@ -102,8 +106,67 @@ function subscribeJobEvents(session, jobid) {
     }
     else {
         console.warn(`Job with ID [${jobid}] not found`)
-        return {result: "error"}
+        return { result: "error" }
     }
+}
+
+/**
+ * Unsubscribes the specified session from the events of the specified job
+ * @param {String} session ID of the specified Websocket Session
+ * @param {String} jobid ID of the specified job
+ * @returns An Object containing the result of the operation
+ */
+function unsubscribeJobEvents(session, jobid) {
+    const sessionData = sessions.get(session)
+    if (!sessionData) {
+        console.warn(`Session [${session}] not found`)
+        return { result: "error", message: "Session not found" }
+    }
+
+    if (sessionData.subscriptions.has(jobid)) {
+        sessionData.subscriptions.delete(jobid)
+        const hasOtherSubscribers = Array.from(sessions.values())
+            .some(data => data.subscriptions.has(jobid))
+
+        if (!hasOtherSubscribers) {
+            const job = MonitoringManager.getInstance().getJob(jobid)
+            if (job) {
+                job.eventEmitter.removeListener('job-update', onJobEvent)
+                LOG.logSystem('DEBUG', `Removed event listener for job [${jobid}]`, module.id)
+            }
+        }
+
+        LOG.logSystem('DEBUG', `Session [${session}] unsubscribed from job [${jobid}]`, module.id)
+        return { result: "unsubscribed" }
+    } else {
+        return { result: "not_subscribed", message: "Session was not subscribed to this job" }
+    }
+}
+
+/**
+ * Unsubscribes the specified session from all job events
+ * @param {String} session ID of the specified Websocket Session
+ * @returns An Object containing the result of the operation
+ */
+function unsubscribeAllJobs(session) {
+    const sessionData = sessions.get(session)
+    if (!sessionData) {
+        console.warn(`Session [${session}] not found`)
+        return { result: "error", message: "Session not found" }
+    }
+
+    const subscribedJobs = Array.from(sessionData.subscriptions)
+    let unsubscribedCount = 0
+
+    subscribedJobs.forEach(jobid => {
+        const result = unsubscribeJobEvents(session, jobid)
+        if (result.result === "unsubscribed") {
+            unsubscribedCount++
+        }
+    })
+
+    LOG.logSystem('DEBUG', `Session [${session}] unsubscribed from ${unsubscribedCount} jobs`, module.id)
+    return { result: "unsubscribed_all", count: unsubscribedCount }
 }
 
 /**
