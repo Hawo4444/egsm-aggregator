@@ -77,7 +77,7 @@ test('onProcessEvent() - detect process deviation', async () => {
 
     }]
     var message = `Process deviation detected at [Process-type-1/instance-1]__truck]!`
-    var expected = new ProcessNotification('obs-1',undefined, message, 'Process-type-1', 'instance-1', 'truck', ['Process-type-1/instance-1'], errorsExpected)
+    var expected = new ProcessNotification('obs-1', undefined, 'process-deviation-detection', message, 'Process-type-1', 'instance-1', 'truck', ['Process-type-1/instance-1'], errorsExpected)
     expected.id = ''
     expected.timestamp = 0
     expect(data).toEqual(expected)
