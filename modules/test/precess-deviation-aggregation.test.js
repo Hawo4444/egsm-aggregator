@@ -514,3 +514,88 @@ test('ProcessDeviationAggregation - multiple perspectives with different deviati
     expect(truckSummary.instancesWithDeviations).toBe(1)
     expect(carrierSummary.instancesWithDeviations).toBe(1)
 })
+
+test('ProcessDeviationAggregation - complex stage calculations', async () => {
+    var notifman = new MockNotificationManager()
+    var perspectives = createMockPerspectiveData('truck', ['Stage_A', 'Stage_B', 'Stage_C'])
+
+    const mockInstances = [
+        { instance_id: 'p1__truck', process_type: 'Process-type-1' },
+        { instance_id: 'p2__truck', process_type: 'Process-type-1' },
+        { instance_id: 'p3__truck', process_type: 'Process-type-1' },
+        { instance_id: 'p4__truck', process_type: 'Process-type-1' }
+    ];
+
+    const mockDeviationData = {
+        'p1': { 
+            deviations: [
+                { type: 'SKIPPED', block_a: 'Stage_A', timestamp: Date.now() },
+                { type: 'SKIPPED', block_a: 'Stage_A', timestamp: Date.now() + 1000 }
+            ]
+        },
+        'p2': { 
+            deviations: [
+                { type: 'SKIPPED', block_a: 'Stage_A', timestamp: Date.now() },
+                { type: 'SKIPPED', block_a: 'Stage_B', timestamp: Date.now() + 2000 }
+            ]
+        },
+        'p3': { 
+            deviations: [
+                { type: 'OVERLAP', block_a: 'Stage_A', block_b: 'Stage_B', timestamp: Date.now() + 3000 }
+            ]
+        }
+    };
+
+    DB.readAllProcessTypeDeviations.mockResolvedValue(mockDeviationData);
+    DB.readAllProcessInstances.mockResolvedValue(mockInstances);
+    DB.writeNewProcessType.mockResolvedValue(true);
+
+    var instance = new ProcessDeviationAggregation('agg-1', [broker], 'owner', 'Process-type-1', perspectives, [], notifman)
+    await instance.initialize()
+
+    const perspectiveSummary = instance.perspectiveSummary.get('truck')
+    expect(perspectiveSummary.totalInstances).toBe(4)
+    expect(perspectiveSummary.instancesWithDeviations).toBe(3)
+    expect(perspectiveSummary.instancesWithoutDeviations).toBe(1)
+    expect(perspectiveSummary.totalDeviations).toBe(5)
+    expect(perspectiveSummary.overallDeviationRate).toBe(75)
+
+    const stageAggregatedData = instance.stageAggregatedData.get('truck')
+    
+    const stageA = stageAggregatedData.get('Stage_A')
+    expect(stageA.totalInstances).toBe(4)
+    expect(stageA.instancesWithDeviations.size).toBe(2)
+    expect(stageA.deviationRate).toBe(50)
+    expect(stageA.deviations).toHaveLength(3)
+    expect(stageA.counts.get('SKIPPED')).toBe(3)
+
+    const stageB = stageAggregatedData.get('Stage_B')
+    expect(stageB.totalInstances).toBe(4)
+    expect(stageB.instancesWithDeviations.size).toBe(2)
+    expect(stageB.deviationRate).toBe(50)
+    expect(stageB.deviations).toHaveLength(2)
+    expect(stageB.counts.get('SKIPPED')).toBe(1)
+    expect(stageB.counts.get('OVERLAP')).toBe(1)
+
+    const stageC = stageAggregatedData.get('Stage_C')
+    expect(stageC.totalInstances).toBe(4)
+    expect(stageC.instancesWithDeviations.size).toBe(0)
+    expect(stageC.deviationRate).toBe(0)
+    expect(stageC.deviations).toHaveLength(0)
+
+    const summary = instance.getAggregatedSummary()
+    const perspectiveData = summary.perspectives[0]
+    
+    expect(perspectiveData.totalStages).toBe(3)
+    expect(perspectiveData.stagesWithDeviations).toBe(2)
+    expect(perspectiveData.stagesWithoutDeviations).toBe(1)
+    expect(perspectiveData.averageDeviationRate).toBe(50)
+
+    const stageADetails = instance.getStageDetails('truck', 'Stage_A')
+    expect(stageADetails.affectedInstances).toEqual(['p1', 'p2'])
+    expect(stageADetails.deviationCounts).toEqual({ 'SKIPPED': 3 })
+
+    const stageBDetails = instance.getStageDetails('truck', 'Stage_B')
+    expect(stageBDetails.affectedInstances).toEqual(['p2', 'p3'])
+    expect(stageBDetails.deviationCounts).toEqual({ 'SKIPPED': 1, 'OVERLAP': 1 })
+})
