@@ -552,6 +552,11 @@ class ProcessDeviationAggregation extends Job {
             // Skip may have multiple stages, return all skipped stages as separate entries
             return Array.isArray(deviation.block_a) ? deviation.block_a : [deviation.block_a];
         }
+        
+        if (deviation.type === 'OVERLAP') {
+            // For overlap deviations, the problem is with the 'open' stage (block_b)
+            return deviation.block_b;
+        }
 
         return deviation.block_a;
     }
