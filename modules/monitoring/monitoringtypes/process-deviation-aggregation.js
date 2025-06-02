@@ -41,11 +41,44 @@ class ProcessDeviationAggregation extends Job {
         try {
             for (const [perspective, perspectiveData] of this.perspectives.entries()) {
                 const perspectiveDeviations = await DDB.readAllProcessTypeDeviations(this.processType, perspective);
-                const allInstances = await DDB.readAllProcessInstances(this.processType);
-                this.deviationData.set(perspective, perspectiveDeviations);
-                this._buildAggregatedStructures(perspective, perspectiveDeviations, allInstances, perspectiveData);
+                const allInstances = await DDB.readAllProcessInstances(this.processType);                
+                const completeInstanceData = {};
+                
+                allInstances.forEach(instance => {
+                    const engineId = instance.instance_id;       
+                    const instanceId = this._extractInstanceId(engineId, perspective);
+                    
+                    console.log(`   Engine ID: ${engineId} → Instance ID: ${instanceId}`);
+                    
+                    // Only include instances for this perspective
+                    if (engineId.endsWith(`__${perspective}`)) {
+                        completeInstanceData[instanceId] = {
+                            instanceId: instanceId,
+                            processType: this.processType,
+                            perspective: perspective,
+                            deviations: [],
+                            timestamp: Math.floor(Date.now() / 1000)
+                        };
+                    }
+                });
+                                
+                // Override with actual deviation data where it exists
+                Object.entries(perspectiveDeviations).forEach(([instanceId, deviationData]) => {
+                    if (completeInstanceData[instanceId]) {
+                        completeInstanceData[instanceId].deviations = deviationData.deviations || [];
+                        console.log(`   Added ${deviationData.deviations?.length || 0} deviations for ${instanceId}`);
+                    } else {
+                        console.warn(`   Instance ${instanceId} has deviations but not found in allInstances`);
+                    }
+                });
+                
+                this.deviationData.set(perspective, completeInstanceData);
+                                const perspectiveInstances = allInstances.filter(instance => 
+                    instance.instance_id.endsWith(`__${perspective}`)
+                );
+                
+                this._buildAggregatedStructures(perspective, completeInstanceData, perspectiveInstances, perspectiveData);
             }
-
             return true;
         } catch (error) {
             console.error(`Failed to initialize ProcessDeviationAggregation job: ${error.message}`);
@@ -57,6 +90,7 @@ class ProcessDeviationAggregation extends Job {
         const stageMap = new Map();
         const instanceLookup = new Map();
         let totalDeviations = 0;
+        let actualInstancesWithDeviations = 0;
 
         const allStages = perspectiveData.egsm_stages;
 
@@ -66,14 +100,19 @@ class ProcessDeviationAggregation extends Job {
                 totalInstances: allInstances.length,
                 instancesWithDeviations: new Set(),
                 deviations: [],
-                counts: new Map(), // deviation_type => count
-                deviationRate: 0 // percentage of instances with deviations in this stage
+                counts: new Map(),
+                deviationRate: 0
             });
             instanceLookup.set(stageName, new Map());
         });
 
         for (const [instanceId, instanceData] of Object.entries(instanceDeviations)) {
             const deviations = instanceData.deviations || [];
+            
+            if (deviations.length > 0) {
+                actualInstancesWithDeviations++;
+            }
+            
             totalDeviations += deviations.length;
 
             const deviationsByStage = this._groupDeviationsByStage(deviations);
@@ -115,12 +154,12 @@ class ProcessDeviationAggregation extends Job {
         // Store summary
         this.perspectiveSummary.set(perspectiveName, {
             totalInstances: allInstances.length,
-            instancesWithDeviations: Object.keys(instanceDeviations).length,
-            instancesWithoutDeviations: allInstances.length - Object.keys(instanceDeviations).length,
+            instancesWithDeviations: actualInstancesWithDeviations,
+            instancesWithoutDeviations: allInstances.length - actualInstancesWithDeviations,
             totalDeviations,
             stageCount: allStages.length,
             overallDeviationRate: allInstances.length > 0
-                ? (Object.keys(instanceDeviations).length / allInstances.length) * 100
+                ? (actualInstancesWithDeviations / allInstances.length) * 100
                 : 0,
             lastUpdated: Date.now()
         });
@@ -224,13 +263,14 @@ class ProcessDeviationAggregation extends Job {
         const stageMap = new Map();
         const instanceLookup = new Map();
         let totalDeviations = 0;
+        let actualInstancesWithDeviations = 0;
 
         const allStages = perspectiveData.egsm_stages;
 
         // Initialize all stages with known instance count
         allStages.forEach(stageName => {
             stageMap.set(stageName, {
-                totalInstances: totalInstanceCount, // Use provided count instead of querying
+                totalInstances: totalInstanceCount,
                 instancesWithDeviations: new Set(),
                 deviations: [],
                 counts: new Map(),
@@ -239,9 +279,14 @@ class ProcessDeviationAggregation extends Job {
             instanceLookup.set(stageName, new Map());
         });
 
-        // Process existing deviations (same as before)
+        // Process existing deviations
         for (const [instanceId, instanceData] of Object.entries(instanceDeviations)) {
             const deviations = instanceData.deviations || [];
+            
+            if (deviations.length > 0) {
+                actualInstancesWithDeviations++;
+            }
+            
             totalDeviations += deviations.length;
 
             const deviationsByStage = this._groupDeviationsByStage(deviations);
@@ -277,15 +322,14 @@ class ProcessDeviationAggregation extends Job {
         this.stageAggregatedData.set(perspectiveName, stageMap);
         this.stageInstanceLookup.set(perspectiveName, instanceLookup);
 
-        // Store summary with known counts
         this.perspectiveSummary.set(perspectiveName, {
             totalInstances: totalInstanceCount,
-            instancesWithDeviations: Object.keys(instanceDeviations).length,
-            instancesWithoutDeviations: totalInstanceCount - Object.keys(instanceDeviations).length,
+            instancesWithDeviations: actualInstancesWithDeviations,
+            instancesWithoutDeviations: totalInstanceCount - actualInstancesWithDeviations,
             totalDeviations,
             stageCount: allStages.length,
             overallDeviationRate: totalInstanceCount > 0
-                ? (Object.keys(instanceDeviations).length / totalInstanceCount) * 100
+                ? (actualInstancesWithDeviations / totalInstanceCount) * 100
                 : 0,
             lastUpdated: Date.now()
         });
@@ -391,7 +435,6 @@ class ProcessDeviationAggregation extends Job {
                 timestamp: Math.floor(Date.now() / 1000)
             };
 
-            // USE IN-MEMORY COUNT INSTEAD OF DATABASE QUERY
             const totalInstanceCount = Object.keys(perspectiveData).length;
             const perspectiveInfo = this.perspectives.get(perspectiveName);
             this._buildAggregatedStructuresWithCount(perspectiveName, perspectiveData, totalInstanceCount, perspectiveInfo);
@@ -554,6 +597,20 @@ class ProcessDeviationAggregation extends Job {
         }
 
         return deviation.block_a;
+    }
+
+    /**
+     * Extract actual instance ID from engine ID
+     * @param {string} engineId Engine ID like "p3__Truck"
+     * @param {string} perspective Perspective name like "Truck"
+     * @returns {string} Instance ID like "p3"
+     */
+    _extractInstanceId(engineId, perspective) {
+        const suffix = `__${perspective}`;
+        if (engineId.endsWith(suffix)) {
+            return engineId.slice(0, -suffix.length);
+        }
+        return engineId;
     }
 }
 
