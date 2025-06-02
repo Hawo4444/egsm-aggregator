@@ -48,8 +48,6 @@ class ProcessDeviationAggregation extends Job {
                     const engineId = instance.instance_id;
                     const instanceId = this._extractInstanceId(engineId, perspective);
 
-                    console.log(`   Engine ID: ${engineId} → Instance ID: ${instanceId}`);
-
                     // Only include instances for this perspective
                     if (engineId.endsWith(`__${perspective}`)) {
                         completeInstanceData[instanceId] = {
@@ -359,41 +357,48 @@ class ProcessDeviationAggregation extends Job {
      * @returns {Object} Summary data
      */
     getAggregatedSummary() {
-        let totalStages = 0;
-        let stagesWithDeviations = 0;
-        let totalDeviationRate = 0;
-        let severityCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 };
-        const stageDetails = {};
+        const perspectiveSummaries = [];
 
-        for (const [stageId, stats] of this.aggregatedData.entries()) {
-            totalStages++;
-            if (stats.deviationRate > 0) {
-                stagesWithDeviations++;
-                totalDeviationRate += stats.deviationRate;
+        // Get summary for each perspective
+        for (const [perspectiveName, stageData] of this.stageAggregatedData.entries()) {
+            let totalStages = 0;
+            let stagesWithDeviations = 0;
+            let totalDeviationRate = 0;
+            const stageDetails = {};
+
+            for (const [stageId, stats] of stageData.entries()) {
+                totalStages++;
+                if (stats.deviationRate > 0) {
+                    stagesWithDeviations++;
+                    totalDeviationRate += stats.deviationRate;
+                }
+
+                // Add stage details for frontend tooltip use
+                stageDetails[stageId] = {
+                    totalInstances: stats.totalInstances,
+                    instancesWithDeviations: stats.instancesWithDeviations instanceof Set ?
+                        stats.instancesWithDeviations.size : stats.instancesWithDeviations,
+                    deviationRate: stats.deviationRate,
+                    deviationCounts: Object.fromEntries(stats.counts)
+                };
             }
 
-            const severity = this._calculateSeverity(stats.deviationRate);
-            severityCounts[severity]++;
+            const perspectiveSummary = this.perspectiveSummary.get(perspectiveName) || {};
 
-            // Add stage details for frontend tooltip use
-            stageDetails[stageId] = {
-                totalInstances: stats.totalInstances,
-                instancesWithDeviations: stats.instancesWithDeviations instanceof Set ?
-                    stats.instancesWithDeviations.size : stats.instancesWithDeviations,
-                deviationRate: stats.deviationRate,
-                deviationCounts: Object.fromEntries(stats.counts),
-                severity: severity
-            };
+            perspectiveSummaries.push({
+                perspective: perspectiveName,
+                totalStages,
+                stagesWithDeviations,
+                stagesWithoutDeviations: totalStages - stagesWithDeviations,
+                averageDeviationRate: stagesWithDeviations > 0 ? (totalDeviationRate / stagesWithDeviations) : 0,
+                stageDetails,
+                ...perspectiveSummary
+            });
         }
 
         return {
-            perspective: this.perspective_name,
-            totalStages,
-            stagesWithDeviations,
-            stagesWithoutDeviations: totalStages - stagesWithDeviations,
-            averageDeviationRate: stagesWithDeviations > 0 ? (totalDeviationRate / stagesWithDeviations) : 0,
-            severityDistribution: severityCounts,
-            stageDetails // This enables the frontend tooltips
+            perspectives: perspectiveSummaries,
+            overall: this._calculateOverallSummary(perspectiveSummaries)
         };
     }
 
@@ -528,8 +533,7 @@ class ProcessDeviationAggregation extends Job {
             totalDeviations: 0,
             instancesWithDeviations: 0,
             instancesWithoutDeviations: 0,
-            averageDeviationRate: 0,
-            severityDistribution: { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 }
+            averageDeviationRate: 0
         };
 
         // Calculate totals across perspectives
@@ -540,12 +544,6 @@ class ProcessDeviationAggregation extends Job {
 
             // Take maximum instances with deviations across perspectives
             overall.instancesWithDeviations = Math.max(overall.instancesWithDeviations, summary.instancesWithDeviations || 0);
-
-            if (summary.severityDistribution) {
-                Object.keys(overall.severityDistribution).forEach(severity => {
-                    overall.severityDistribution[severity] += summary.severityDistribution[severity] || 0;
-                });
-            }
         });
 
         overall.instancesWithoutDeviations = overall.totalInstances - overall.instancesWithDeviations;
