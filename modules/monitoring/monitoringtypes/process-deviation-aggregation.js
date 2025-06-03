@@ -34,6 +34,12 @@ class ProcessDeviationAggregation extends Job {
         this.stageAggregatedData = new Map(); // perspective => stage => { instances: Set, deviations: [], counts: Map }
         this.stageInstanceLookup = new Map(); // perspective => stage => instance => deviations[]
         this.perspectiveSummary = new Map(); // perspective => { totalInstances: number, totalDeviations: number, etc. }
+                this.stageCorrelations = new Map(); // perspective => Map<stage1-stage2, count>
+        this.instanceDeviationCounts = new Map(); // perspective => Map<instanceId, count>
+        this.deviationTypeCounts = new Map(); // perspective => Map<type, count>
+        this.deviationTypeInstances = new Map(); // perspective => Map<type, Set<instanceId>>
+        this.deviationTypePercentages = new Map(); // perspective => Map<type, percentage>
+        
         this.isInitialized = false;
     }
 
@@ -103,6 +109,8 @@ class ProcessDeviationAggregation extends Job {
             instanceLookup.set(stageName, new Map());
         });
 
+        this._initializeProcessAggregations(perspectiveName);
+
         for (const [instanceId, instanceData] of Object.entries(instanceDeviations)) {
             const deviations = instanceData.deviations || [];
 
@@ -112,6 +120,8 @@ class ProcessDeviationAggregation extends Job {
 
             totalDeviations += deviations.length;
 
+            this._updateProcessAggregations(perspectiveName, instanceId, deviations, allInstances.length);
+
             const deviationsByStage = this._groupDeviationsByStage(deviations);
 
             for (const [stageName, stageDeviations] of deviationsByStage.entries()) {
@@ -119,36 +129,30 @@ class ProcessDeviationAggregation extends Job {
                     const stageData = stageMap.get(stageName);
                     stageData.instancesWithDeviations.add(instanceId);
 
-                    // Add deviations
                     stageData.deviations.push(...stageDeviations.map(dev => ({
                         ...dev,
                         instanceId
                     })));
 
-                    // Update counts
                     stageDeviations.forEach(deviation => {
                         const type = deviation.type;
                         stageData.counts.set(type, (stageData.counts.get(type) || 0) + 1);
                     });
 
-                    // Store in instance lookup
                     instanceLookup.get(stageName).set(instanceId, stageDeviations);
                 }
             }
         }
 
-        // Calculate deviation rates for each stage
         for (const [_, stageData] of stageMap.entries()) {
             stageData.deviationRate = stageData.totalInstances > 0
                 ? (stageData.instancesWithDeviations.size / stageData.totalInstances) * 100
                 : 0;
         }
 
-        // Store aggregated data
         this.stageAggregatedData.set(perspectiveName, stageMap);
         this.stageInstanceLookup.set(perspectiveName, instanceLookup);
 
-        // Store summary
         this.perspectiveSummary.set(perspectiveName, {
             totalInstances: allInstances.length,
             instancesWithDeviations: actualInstancesWithDeviations,
@@ -165,6 +169,74 @@ class ProcessDeviationAggregation extends Job {
         if (bpmnModel) {
             bpmnModel.applyAggregatedStatistics(stageMap);
         }
+    }
+
+    /**
+     * Initialize process-level aggregation structures for a perspective
+     * @param {string} perspectiveName Name of the perspective
+     */
+    _initializeProcessAggregations(perspectiveName) {
+        this.stageCorrelations.set(perspectiveName, new Map());
+        this.instanceDeviationCounts.set(perspectiveName, new Map());
+        this.deviationTypeCounts.set(perspectiveName, new Map());
+        this.deviationTypeInstances.set(perspectiveName, new Map());
+        this.deviationTypePercentages.set(perspectiveName, new Map());
+    }
+
+    /**
+     * Update process-level aggregations for an instance
+     * @param {string} perspectiveName Name of the perspective
+     * @param {string} instanceId Instance ID
+     * @param {Array} deviations Array of deviations for this instance
+     * @param {number} totalInstances Total number of instances for percentage calculations
+     */
+    _updateProcessAggregations(perspectiveName, instanceId, deviations, totalInstances) {
+        const correlations = this.stageCorrelations.get(perspectiveName);
+        const instanceCounts = this.instanceDeviationCounts.get(perspectiveName);
+        const typeCounts = this.deviationTypeCounts.get(perspectiveName);
+        const typeInstances = this.deviationTypeInstances.get(perspectiveName);
+        const typePercentages = this.deviationTypePercentages.get(perspectiveName);
+
+        instanceCounts.set(instanceId, deviations.length);
+
+        if (deviations.length === 0) return;
+
+        const stagesWithDeviations = new Set();
+        const deviationTypes = new Set();
+
+        deviations.forEach(deviation => {
+            const stageNames = this._getRelevantBlockIds(deviation);
+            const stages = Array.isArray(stageNames) ? stageNames : [stageNames];
+            
+            stages.forEach(stage => {
+                if (stage) {
+                    stagesWithDeviations.add(stage);
+                }
+            });
+
+            const type = deviation.type;
+            deviationTypes.add(type);
+            typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+
+            if (!typeInstances.has(type)) {
+                typeInstances.set(type, new Set());
+            }
+            typeInstances.get(type).add(instanceId);
+        });
+
+        const stageArray = Array.from(stagesWithDeviations).sort();
+        for (let i = 0; i < stageArray.length; i++) {
+            for (let j = i + 1; j < stageArray.length; j++) {
+                const pair = `${stageArray[i]}-${stageArray[j]}`;
+                correlations.set(pair, (correlations.get(pair) || 0) + 1);
+            }
+        }
+
+        deviationTypes.forEach(type => {
+            const instancesWithType = typeInstances.get(type).size;
+            const percentage = totalInstances > 0 ? (instancesWithType / totalInstances) * 100 : 0;
+            typePercentages.set(type, percentage);
+        });
     }
 
     _groupDeviationsByStage(deviations) {
@@ -262,7 +334,6 @@ class ProcessDeviationAggregation extends Job {
 
         const allStages = perspectiveData.egsm_stages;
 
-        // Initialize all stages with known instance count
         allStages.forEach(stageName => {
             stageMap.set(stageName, {
                 totalInstances: totalInstanceCount,
@@ -274,7 +345,8 @@ class ProcessDeviationAggregation extends Job {
             instanceLookup.set(stageName, new Map());
         });
 
-        // Process existing deviations
+        this._initializeProcessAggregations(perspectiveName);
+
         for (const [instanceId, instanceData] of Object.entries(instanceDeviations)) {
             const deviations = instanceData.deviations || [];
 
@@ -283,6 +355,8 @@ class ProcessDeviationAggregation extends Job {
             }
 
             totalDeviations += deviations.length;
+
+            this._updateProcessAggregations(perspectiveName, instanceId, deviations, totalInstanceCount);
 
             const deviationsByStage = this._groupDeviationsByStage(deviations);
 
@@ -306,7 +380,6 @@ class ProcessDeviationAggregation extends Job {
             }
         }
 
-        // Calculate deviation rates for each stage
         for (const [_, stageData] of stageMap.entries()) {
             stageData.deviationRate = stageData.totalInstances > 0
                 ? (stageData.instancesWithDeviations.size / stageData.totalInstances) * 100
@@ -335,21 +408,64 @@ class ProcessDeviationAggregation extends Job {
     }
 
     /**
-     * Handle external requests for aggregation data
-     * @param {Object} request Request object
-     * @returns {Object} Response with requested data
+     * Get process-level aggregations for a specific perspective
+     * @param {string} perspectiveName Name of the perspective (optional)
+     * @returns {Object} Process aggregation data
      */
-    handleExternalRequest(request) {
-        switch (request.type) {
-            case 'GET_COMPLETE_DATA':
-                return this.getCompleteAggregationData();
-            case 'GET_STAGE_DETAILS':
-                return this.getStageDetails(request.perspectiveName, request.stageId);
-            case 'GET_SUMMARY':
-                return this.getAggregatedSummary();
-            default:
-                return { error: 'Unknown request type' };
+    getProcessAggregations(perspectiveName = null) {
+        const result = {};
+
+        const perspectives = perspectiveName 
+            ? [perspectiveName] 
+            : Array.from(this.perspectives.keys());
+
+        perspectives.forEach(perspective => {
+            if (!this.stageCorrelations.has(perspective)) return;
+
+            result[perspective] = {
+                stageCorrelations: this._getTopStageCorrelations(perspective, 10),
+                instanceDeviationCounts: Object.fromEntries(this.instanceDeviationCounts.get(perspective)),
+                deviationTypeCounts: Object.fromEntries(this.deviationTypeCounts.get(perspective)),
+                deviationTypeInstances: this._convertSetMapToObject(this.deviationTypeInstances.get(perspective)),
+                deviationTypePercentages: Object.fromEntries(this.deviationTypePercentages.get(perspective))
+            };
+        });
+
+        return result;
+    }
+
+    /**
+     * Get top stage correlations sorted by frequency
+     * @param {string} perspectiveName Name of the perspective
+     * @param {number} limit Maximum number of correlations to return
+     * @returns {Array} Array of correlation objects
+     */
+    _getTopStageCorrelations(perspectiveName, limit = 10) {
+        const correlations = this.stageCorrelations.get(perspectiveName);
+        if (!correlations) return [];
+
+        return Array.from(correlations.entries())
+            .map(([pair, count]) => {
+                const [stage1, stage2] = pair.split('-');
+                return { stage1, stage2, count };
+            })
+            .sort((a, b) => b.count - a.count)
+            .slice(0, limit);
+    }
+
+    /**
+     * Convert Map with Set values to plain object
+     * @param {Map} map Map with Set values
+     * @returns {Object} Plain object with array values
+     */
+    _convertSetMapToObject(map) {
+        const result = {};
+        if (!map) return result;
+        
+        for (const [key, set] of map.entries()) {
+            result[key] = Array.from(set);
         }
+        return result;
     }
 
     /**
@@ -359,7 +475,6 @@ class ProcessDeviationAggregation extends Job {
     getAggregatedSummary() {
         const perspectiveSummaries = [];
 
-        // Get summary for each perspective
         for (const [perspectiveName, stageData] of this.stageAggregatedData.entries()) {
             let totalStages = 0;
             let stagesWithDeviations = 0;
@@ -373,7 +488,6 @@ class ProcessDeviationAggregation extends Job {
                     totalDeviationRate += stats.deviationRate;
                 }
 
-                // Add stage details for frontend tooltip use
                 stageDetails[stageId] = {
                     totalInstances: stats.totalInstances,
                     instancesWithDeviations: stats.instancesWithDeviations instanceof Set ?
@@ -398,7 +512,8 @@ class ProcessDeviationAggregation extends Job {
 
         return {
             perspectives: perspectiveSummaries,
-            overall: this._calculateOverallSummary(perspectiveSummaries)
+            overall: this._calculateOverallSummary(perspectiveSummaries),
+            processAggregations: this.getProcessAggregations()
         };
     }
 
@@ -511,7 +626,8 @@ class ProcessDeviationAggregation extends Job {
             overlays: overlays,
             summary: {
                 perspectives: perspectiveSummaries,
-                overall: this._calculateOverallSummary(perspectiveSummaries)
+                overall: this._calculateOverallSummary(perspectiveSummaries),
+                processAggregations: this.getProcessAggregations()
             },
             type: 'COMPLETE_AGGREGATION',
             timestamp: Date.now()
@@ -536,46 +652,17 @@ class ProcessDeviationAggregation extends Job {
             averageDeviationRate: 0
         };
 
-        // Calculate totals across perspectives
         let totalDeviationRate = 0;
         perspectiveSummaries.forEach(summary => {
             overall.totalDeviations += summary.totalDeviations || 0;
             totalDeviationRate += summary.overallDeviationRate || 0;
 
-            // Take maximum instances with deviations across perspectives
             overall.instancesWithDeviations = Math.max(overall.instancesWithDeviations, summary.instancesWithDeviations || 0);
         });
 
         overall.instancesWithoutDeviations = overall.totalInstances - overall.instancesWithDeviations;
         overall.averageDeviationRate = totalDeviationRate / perspectiveSummaries.length;
         return overall;
-    }
-
-    /**
-     * Get detailed breakdown for a specific stage
-     * @param {string} perspectiveName Perspective name
-     * @param {string} stageId Stage ID
-     * @returns {Object} Detailed stage information
-     */
-    getStageDetails(perspectiveName, stageId) {
-        const stageData = this.stageAggregatedData.get(perspectiveName)?.get(stageId);
-
-        if (!stageData) {
-            return null;
-        }
-
-        return {
-            stageId,
-            perspectiveName,
-            totalInstances: stageData.totalInstances,
-            instancesWithDeviations: stageData.instancesWithDeviations.size,
-            deviationRate: stageData.deviationRate,
-            deviationCounts: Object.fromEntries(stageData.counts),
-            affectedInstances: Array.from(stageData.instancesWithDeviations),
-            recentDeviations: stageData.deviations
-                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                .slice(0, 10) // Last 10 deviations
-        };
     }
 
     /**
