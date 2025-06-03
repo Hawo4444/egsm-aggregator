@@ -95,9 +95,12 @@ class ProcessDeviationAggregation extends Job {
         let totalDeviations = 0;
         let actualInstancesWithDeviations = 0;
 
-        const allStages = perspectiveData.egsm_stages;
+        // Filter out SequenceFlow stages from the stage list
+        const allStages = perspectiveData.egsm_stages.filter(stageName => 
+            !stageName.startsWith('SequenceFlow')
+        );
 
-        // Initialize all stages
+        // Initialize all stages (excluding SequenceFlow)
         allStages.forEach(stageName => {
             stageMap.set(stageName, {
                 totalInstances: allInstances.length,
@@ -125,7 +128,8 @@ class ProcessDeviationAggregation extends Job {
             const deviationsByStage = this._groupDeviationsByStage(deviations);
 
             for (const [stageName, stageDeviations] of deviationsByStage.entries()) {
-                if (stageMap.has(stageName)) {
+                // Skip SequenceFlow stages and only process stages that are in our filtered list
+                if (stageName && !stageName.startsWith('SequenceFlow') && stageMap.has(stageName)) {
                     const stageData = stageMap.get(stageName);
                     stageData.instancesWithDeviations.add(instanceId);
 
@@ -197,19 +201,29 @@ class ProcessDeviationAggregation extends Job {
         const typeInstances = this.deviationTypeInstances.get(perspectiveName);
         const typePercentages = this.deviationTypePercentages.get(perspectiveName);
 
-        instanceCounts.set(instanceId, deviations.length);
+        // Filter out SequenceFlow deviations before counting
+        const filteredDeviations = deviations.filter(deviation => {
+            const stageNames = this._getRelevantBlockIds(deviation);
+            const stages = Array.isArray(stageNames) ? stageNames : [stageNames];
+            
+            // Only include deviation if it involves at least one non-SequenceFlow stage
+            return stages.some(stage => stage && !stage.startsWith('SequenceFlow'));
+        });
 
-        if (deviations.length === 0) return;
+        instanceCounts.set(instanceId, filteredDeviations.length);
+
+        if (filteredDeviations.length === 0) return;
 
         const stagesWithDeviations = new Set();
         const deviationTypes = new Set();
 
-        deviations.forEach(deviation => {
+        filteredDeviations.forEach(deviation => {
             const stageNames = this._getRelevantBlockIds(deviation);
             const stages = Array.isArray(stageNames) ? stageNames : [stageNames];
             
             stages.forEach(stage => {
-                if (stage) {
+                // Filter out SequenceFlow stages from correlations
+                if (stage && !stage.startsWith('SequenceFlow')) {
                     stagesWithDeviations.add(stage);
                 }
             });
@@ -224,7 +238,11 @@ class ProcessDeviationAggregation extends Job {
             typeInstances.get(type).add(instanceId);
         });
 
-        const stageArray = Array.from(stagesWithDeviations).sort();
+        // Update stage correlations (pairs of stages that both have deviations in same instance)
+        const stageArray = Array.from(stagesWithDeviations)
+            .filter(stage => !stage.startsWith('SequenceFlow'))
+            .sort();
+        
         for (let i = 0; i < stageArray.length; i++) {
             for (let j = i + 1; j < stageArray.length; j++) {
                 const pair = `${stageArray[i]}-${stageArray[j]}`;
@@ -332,7 +350,10 @@ class ProcessDeviationAggregation extends Job {
         let totalDeviations = 0;
         let actualInstancesWithDeviations = 0;
 
-        const allStages = perspectiveData.egsm_stages;
+        // Filter out SequenceFlow stages from the stage list
+        const allStages = perspectiveData.egsm_stages.filter(stageName => 
+            !stageName.startsWith('SequenceFlow')
+        );
 
         allStages.forEach(stageName => {
             stageMap.set(stageName, {
@@ -361,7 +382,7 @@ class ProcessDeviationAggregation extends Job {
             const deviationsByStage = this._groupDeviationsByStage(deviations);
 
             for (const [stageName, stageDeviations] of deviationsByStage.entries()) {
-                if (stageMap.has(stageName)) {
+                if (stageName && !stageName.startsWith('SequenceFlow') && stageMap.has(stageName)) {
                     const stageData = stageMap.get(stageName);
                     stageData.instancesWithDeviations.add(instanceId);
 
@@ -482,12 +503,18 @@ class ProcessDeviationAggregation extends Job {
             const stageDetails = {};
 
             for (const [stageId, stats] of stageData.entries()) {
+                // Skip SequenceFlow stages in summary calculations
+                if (stageId.startsWith('SequenceFlow')) {
+                    continue;
+                }
+
                 totalStages++;
                 if (stats.deviationRate > 0) {
                     stagesWithDeviations++;
                     totalDeviationRate += stats.deviationRate;
                 }
 
+                // Add stage details for frontend tooltip use
                 stageDetails[stageId] = {
                     totalInstances: stats.totalInstances,
                     instancesWithDeviations: stats.instancesWithDeviations instanceof Set ?
