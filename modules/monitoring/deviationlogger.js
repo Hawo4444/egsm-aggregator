@@ -19,7 +19,6 @@ function handleDeviations(messageObj) {
             return;
         }
 
-        // Only store if there are actual deviations
         if (!messageObj.deviations || messageObj.deviations.length === 0) {
             LOG.logWorker('DEBUG', `No deviations to store for ${messageObj.process_type}/${messageObj.process_id}__${messageObj.process_perspective}`, module.id);
             return;
