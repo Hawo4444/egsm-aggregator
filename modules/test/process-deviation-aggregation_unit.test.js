@@ -206,6 +206,58 @@ describe('ProcessDeviationAggregation - Unit Tests', () => {
         });
     });
 
+    describe('Error Handling - Extended', () => {
+        test('should handle handleDeviations errors', async () => {
+            mockDB.readAllProcessTypeDeviations.mockResolvedValue({});
+            mockDB.readAllProcessInstances.mockResolvedValue([]);
+            await instance.initialize();
+            
+            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            
+            jest.spyOn(instance, '_updateInMemoryStructures').mockRejectedValue(new Error('Update failed'));
+            
+            const messageObj = {
+                process_id: 'p1',
+                process_perspective: 'truck',
+                deviations: createMockDeviations('SKIPPED', 'Stage_A')
+            };
+            
+            await instance.handleDeviations(messageObj);
+            
+            expect(consoleSpy).toHaveBeenCalledWith('Failed to handle deviations: Update failed');
+            consoleSpy.mockRestore();
+        });
+
+        test('should handle handleNewInstance initialization errors', async () => {
+            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            
+            mockDB.readAllProcessTypeDeviations.mockRejectedValue(new Error('DB error'));
+            
+            await instance.handleNewInstance('p1');
+            
+            expect(consoleSpy).toHaveBeenCalledWith('Failed to initialize ProcessDeviationAggregation job: DB error');
+            consoleSpy.mockRestore();
+        });
+
+        test('should handle handleNewInstance processing errors', async () => {
+            const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+            
+            mockDB.readAllProcessTypeDeviations.mockResolvedValue({});
+            mockDB.readAllProcessInstances.mockResolvedValue([]);
+            
+            instance.isInitialized = true;
+            
+            jest.spyOn(instance, '_buildAggregatedStructuresWithCount').mockImplementation(() => {
+                throw new Error('Failed to build aggregated structures');
+            });
+            
+            await instance.handleNewInstance('p1');
+            
+            expect(consoleSpy).toHaveBeenCalledWith('Failed to handle new instance: Failed to build aggregated structures');
+            consoleSpy.mockRestore();
+        });
+    });
+
     describe('Event Triggering', () => {
         test('should trigger complete update event', async () => {
             mockDB.readAllProcessTypeDeviations.mockResolvedValue({});
