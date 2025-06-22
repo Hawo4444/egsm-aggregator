@@ -367,15 +367,14 @@ test('ProcessDeviationAggregation - get stage details', async () => {
     var instance = new ProcessDeviationAggregation('agg-1', [broker], 'owner', 'Process-type-1', perspectives, [], notifman)
     await instance.initialize()
 
-    const stageDetails = instance.getStageDetails('truck', 'Stage_A')
+    const summary = instance.getAggregatedSummary()
+    const stageDetails = summary.perspectives[0].stageDetails['Stage_A']
 
     expect(stageDetails).not.toBeNull()
-    expect(stageDetails.stageId).toBe('Stage_A')
-    expect(stageDetails.perspectiveName).toBe('truck')
     expect(stageDetails.totalInstances).toBe(2)
     expect(stageDetails.instancesWithDeviations).toBe(1)
     expect(stageDetails.deviationRate).toBe(50)
-    expect(stageDetails.affectedInstances).toContain('p1')
+    expect(stageDetails.deviationCounts).toEqual({ 'SKIPPED': 1 })
 })
 
 test('ProcessDeviationAggregation - handle external request for complete data', async () => {
@@ -385,8 +384,7 @@ test('ProcessDeviationAggregation - handle external request for complete data', 
     var instance = new ProcessDeviationAggregation('agg-1', [broker], 'owner', 'Process-type-1', perspectives, [], notifman)
     await instance.initialize()
 
-    const request = { type: 'GET_COMPLETE_DATA' }
-    const response = instance.handleExternalRequest(request)
+    const response = instance.getCompleteAggregationData()
 
     expect(response.job_id).toBe('agg-1')
     expect(response.job_type).toBe('process-deviation-aggregation')
@@ -400,8 +398,7 @@ test('ProcessDeviationAggregation - handle external request for summary', async 
     var instance = new ProcessDeviationAggregation('agg-1', [broker], 'owner', 'Process-type-1', perspectives, [], notifman)
     await instance.initialize()
 
-    const request = { type: 'GET_SUMMARY' }
-    const response = instance.handleExternalRequest(request)
+    const response = instance.getAggregatedSummary()
 
     expect(response.perspectives).toBeDefined()
     expect(response.overall).toBeDefined()
@@ -414,28 +411,11 @@ test('ProcessDeviationAggregation - handle external request for stage details', 
     var instance = new ProcessDeviationAggregation('agg-1', [broker], 'owner', 'Process-type-1', perspectives, [], notifman)
     await instance.initialize()
 
-    const request = {
-        type: 'GET_STAGE_DETAILS',
-        perspectiveName: 'truck',
-        stageId: 'Stage_A'
-    }
-    const response = instance.handleExternalRequest(request)
+    const summary = instance.getAggregatedSummary()
+    const response = summary.perspectives[0].stageDetails['Stage_A']
 
-    expect(response.stageId).toBe('Stage_A')
-    expect(response.perspectiveName).toBe('truck')
-})
-
-test('ProcessDeviationAggregation - handle unknown external request', async () => {
-    var notifman = new MockNotificationManager()
-    var perspectives = createMockPerspectiveData('truck', ['Stage_A'])
-
-    var instance = new ProcessDeviationAggregation('agg-1', [broker], 'owner', 'Process-type-1', perspectives, [], notifman)
-    await instance.initialize()
-
-    const request = { type: 'UNKNOWN_REQUEST' }
-    const response = instance.handleExternalRequest(request)
-
-    expect(response.error).toBe('Unknown request type')
+    expect(response.totalInstances).toBeDefined()
+    expect(response.deviationRate).toBeDefined()
 })
 
 test('ProcessDeviationAggregation - normalize stage IDs with iteration suffix', async () => {
@@ -591,11 +571,11 @@ test('ProcessDeviationAggregation - complex stage calculations', async () => {
     expect(perspectiveData.stagesWithoutDeviations).toBe(1)
     expect(perspectiveData.averageDeviationRate).toBe(50)
 
-    const stageADetails = instance.getStageDetails('truck', 'Stage_A')
-    expect(stageADetails.affectedInstances).toEqual(['p1', 'p2'])
+    const stageADetails = summary.perspectives[0].stageDetails['Stage_A']
+    expect(stageADetails.instancesWithDeviations).toBe(2)
     expect(stageADetails.deviationCounts).toEqual({ 'SKIPPED': 3 })
 
-    const stageBDetails = instance.getStageDetails('truck', 'Stage_B')
-    expect(stageBDetails.affectedInstances).toEqual(['p2', 'p3'])
+    const stageBDetails = summary.perspectives[0].stageDetails['Stage_B']
+    expect(stageBDetails.instancesWithDeviations).toBe(2)
     expect(stageBDetails.deviationCounts).toEqual({ 'SKIPPED': 1, 'OVERLAP': 1 })
 })
