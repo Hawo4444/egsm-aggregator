@@ -272,4 +272,117 @@ describe('ProcessDeviationAggregation - Unit Tests', () => {
             expect(mockEmit).toHaveBeenCalledWith('job-update', expect.any(Object));
         });
     });
+
+    describe('Conditional Logic Coverage', () => {
+        test('should handle empty deviations vs non-empty deviations', async () => {
+            mockDB.readAllProcessTypeDeviations.mockResolvedValue({
+                'p1': { deviations: [] },
+                'p2': { deviations: createMockDeviations('SKIPPED', 'Stage_A') }
+            });
+            mockDB.readAllProcessInstances.mockResolvedValue([
+                { instance_id: 'p1__truck' },
+                { instance_id: 'p2__truck' }
+            ]);
+            
+            await instance.initialize();
+            
+            const summary = instance.perspectiveSummary.get('truck');
+            expect(summary.instancesWithDeviations).toBe(1);
+            expect(summary.instancesWithoutDeviations).toBe(1);
+        });
+
+        test('should handle instances with and without suffix match', async () => {
+            mockDB.readAllProcessTypeDeviations.mockResolvedValue({});
+            mockDB.readAllProcessInstances.mockResolvedValue([
+                { instance_id: 'p1__truck' },
+                { instance_id: 'p2__carrier' },
+                { instance_id: 'p3' }
+            ]);
+            
+            await instance.initialize();
+            
+            const truckData = instance.deviationData.get('truck');
+            expect(Object.keys(truckData)).toHaveLength(1);
+        });
+
+        test('should test both branches of _deviationsEqual length check', () => {
+            const dev1 = [{ type: 'SKIPPED', block_a: 'Stage_A' }];
+            const dev2 = [{ type: 'SKIPPED', block_a: 'Stage_A' }, { type: 'OVERLAP', block_a: 'Stage_B' }];
+            
+            expect(instance._deviationsEqual(dev1, dev2)).toBe(false);
+            expect(instance._deviationsEqual(dev2, dev1)).toBe(false);
+        });
+    });
+
+    describe('Warning and Console Branches', () => {
+        test('should handle instance with deviations but not in allInstances', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+            
+            mockDB.readAllProcessTypeDeviations.mockResolvedValue({
+                'p999': { deviations: createMockDeviations('SKIPPED', 'Stage_A') }
+            });
+            mockDB.readAllProcessInstances.mockResolvedValue([
+                { instance_id: 'p1__truck' }
+            ]);
+            
+            await instance.initialize();
+            
+            expect(consoleSpy).toHaveBeenCalledWith('Instance p999 has deviations but not found in allInstances');
+            consoleSpy.mockRestore();
+        });
+
+        test('should handle SequenceFlow filtering in stage processing', async () => {
+            const perspectives = createMockPerspectiveData('truck', ['Stage_A', 'SequenceFlow_123', 'Stage_B']);
+            const filteredInstance = new ProcessDeviationAggregation(
+                'test', [mockBroker], 'owner', 'Process-type-1', perspectives, [], mockNotificationManager
+            );
+            
+            mockDB.readAllProcessTypeDeviations.mockResolvedValue({
+                'p1': { 
+                    deviations: [
+                        { type: 'SKIPPED', block_a: 'Stage_A' },
+                        { type: 'SKIPPED', block_a: 'SequenceFlow_123' }
+                    ]
+                }
+            });
+            mockDB.readAllProcessInstances.mockResolvedValue([
+                { instance_id: 'p1__truck' }
+            ]);
+            
+            await filteredInstance.initialize();
+            
+            const stageData = filteredInstance.stageAggregatedData.get('truck');
+            expect(stageData.has('Stage_A')).toBe(true);
+            expect(stageData.has('SequenceFlow_123')).toBe(false);
+        });
+    });
+
+    describe('Edge Cases and Map Operations', () => {
+        test('should handle missing perspective data in getProcessAggregations', () => {
+            const result = instance.getProcessAggregations('nonexistent');
+            expect(result).toEqual({});
+        });
+
+        test('should handle zero division in deviationRate calculation', async () => {
+            mockDB.readAllProcessTypeDeviations.mockResolvedValue({});
+            mockDB.readAllProcessInstances.mockResolvedValue([]);
+            
+            await instance.initialize();
+            
+            const stageData = instance.stageAggregatedData.get('truck');
+            if (stageData) {
+                for (const [_, stats] of stageData.entries()) {
+                    expect(stats.deviationRate).toBe(0);
+                }
+            }
+        });
+
+        test('should handle both array and single block IDs in _getRelevantBlockIds', () => {
+            const singleBlock = { type: 'INCOMPLETE', block_a: 'Stage_A' };
+            const multiBlock = { type: 'SKIPPED', block_a: ['Stage_A', 'Stage_B'] };
+            
+            expect(instance._getRelevantBlockIds(singleBlock)).toEqual(['Stage_A']);
+            expect(instance._getRelevantBlockIds(multiBlock)).toEqual(['Stage_A', 'Stage_B']);
+        });
+    });
 });
