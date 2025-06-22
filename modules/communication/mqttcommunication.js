@@ -8,6 +8,7 @@ var MQTT = require("../egsm-common/communication/mqttconnector")
 var LOG = require('../egsm-common/auxiliary/logManager')
 var AUX = require('../egsm-common/auxiliary/auxiliary')
 var CONNCONFIG = require('../egsm-common/config/connectionconfig');
+const DEVLOG = require('../monitoring/deviationlogger');
 const { Broker } = require("../egsm-common/auxiliary/primitives");
 
 module.id = "MQTTCOMM"
@@ -154,6 +155,7 @@ function onMessageReceived(hostname, port, topic, message) {
         switch (msgJson.message_type) {
             case 'PROCESS_DEVIATIONS': {
                 LOG.logSystem('DEBUG', `PROCESS_DEVIATIONS message received`, module.id)
+                DEVLOG.handleDeviations(msgJson['payload']);
                 if (MONITORING_MANAGER) {
                     const processType = msgJson['payload']['process_type'];
                     const perspective = msgJson['payload']['process_perspective'];
@@ -164,7 +166,7 @@ function onMessageReceived(hostname, port, topic, message) {
                             job.handleDeviations(msgJson['payload']);
                             LOG.logSystem('DEBUG', `PROCESS_DEVIATIONS routed to job ${jobId}`, module.id);
                         }
-                    }
+                    }                   
                 }
                 break;
             }

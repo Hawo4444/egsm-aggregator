@@ -3,6 +3,7 @@ const { AggregatedBpmnModel } = require('./bpmn/aggregated-bpmn-model');
 const { SkipDeviation, OverlapDeviation, IncorrectExecutionSequenceDeviation,
     IncompleteDeviation, MultiExecutionDeviation, IncorrectBranchDeviation } = require('./bpmn/process-perspective');
 const DDB = require('../../egsm-common/database/databaseconnector');
+const performanceTracker = require('../../egsm-common/monitoring/performanceTracker');
 
 /**
  * ProcessDeviationAggregation job combines data from multiple instances 
@@ -34,12 +35,12 @@ class ProcessDeviationAggregation extends Job {
         this.stageAggregatedData = new Map(); // perspective => stage => { instances: Set, deviations: [], counts: Map }
         this.stageInstanceLookup = new Map(); // perspective => stage => instance => deviations[]
         this.perspectiveSummary = new Map(); // perspective => { totalInstances: number, totalDeviations: number, etc. }
-                this.stageCorrelations = new Map(); // perspective => Map<stage1-stage2, count>
+        this.stageCorrelations = new Map(); // perspective => Map<stage1-stage2, count>
         this.instanceDeviationCounts = new Map(); // perspective => Map<instanceId, count>
         this.deviationTypeCounts = new Map(); // perspective => Map<type, count>
         this.deviationTypeInstances = new Map(); // perspective => Map<type, Set<instanceId>>
         this.deviationTypePercentages = new Map(); // perspective => Map<type, percentage>
-        
+
         this.isInitialized = false;
     }
 
@@ -71,7 +72,7 @@ class ProcessDeviationAggregation extends Job {
                     if (completeInstanceData[instanceId]) {
                         completeInstanceData[instanceId].deviations = deviationData.deviations || [];
                     } else {
-                        console.warn(`   Instance ${instanceId} has deviations but not found in allInstances`);
+                        console.warn(`Instance ${instanceId} has deviations but not found in allInstances`);
                     }
                 });
 
@@ -89,6 +90,59 @@ class ProcessDeviationAggregation extends Job {
         }
     }
 
+    /**
+    * Called automatically when deviations received
+    * @param {Object} messageObj received process event object 
+    */
+    async handleDeviations(messageObj) {
+        try {
+            await this._updateInMemoryStructures(messageObj.process_perspective, messageObj.process_id, messageObj.deviations);
+        } catch (error) {
+            console.error(`Failed to handle deviations: ${error.message}`);
+        }
+    }
+
+    /**
+    * Handle new process instance notification
+    * @param {string} instanceId New instance ID
+    */
+    async handleNewInstance(instanceId) {
+        if (!this.isInitialized) {
+            await this.initialize();
+            this.isInitialized = true;
+        }
+
+        try {
+            for (const [perspectiveName, _] of this.perspectives.entries()) {
+                if (!this.deviationData.has(perspectiveName)) {
+                    this.deviationData.set(perspectiveName, {});
+                }
+
+                // Add instance with empty deviations initially
+                this.deviationData.get(perspectiveName)[instanceId] = {
+                    instanceId: instanceId,
+                    processType: this.processType,
+                    perspective: perspectiveName,
+                    deviations: [],
+                    timestamp: Math.floor(Date.now() / 1000)
+                };
+            }
+
+            const samplePerspective = this.perspectives.keys().next().value;
+            const existingInstances = Object.keys(this.deviationData.get(samplePerspective) || {});
+            const totalInstanceCount = existingInstances.length;
+
+            for (const [perspectiveName, perspectiveInfo] of this.perspectives.entries()) {
+                const perspectiveData = this.deviationData.get(perspectiveName) || {};
+                this._buildAggregatedStructuresWithCount(perspectiveName, perspectiveData, totalInstanceCount, perspectiveInfo);
+            }
+
+            this.triggerCompleteUpdateEvent();
+        } catch (error) {
+            console.error(`Failed to handle new instance: ${error.message}`);
+        }
+    }
+
     _buildAggregatedStructures(perspectiveName, instanceDeviations, allInstances, perspectiveData) {
         const stageMap = new Map();
         const instanceLookup = new Map();
@@ -96,11 +150,10 @@ class ProcessDeviationAggregation extends Job {
         let actualInstancesWithDeviations = 0;
 
         // Filter out SequenceFlow stages from the stage list
-        const allStages = perspectiveData.egsm_stages.filter(stageName => 
+        const allStages = perspectiveData.egsm_stages.filter(stageName =>
             !stageName.startsWith('SequenceFlow')
         );
 
-        // Initialize all stages (excluding SequenceFlow)
         allStages.forEach(stageName => {
             stageMap.set(stageName, {
                 totalInstances: allInstances.length,
@@ -205,7 +258,7 @@ class ProcessDeviationAggregation extends Job {
         const filteredDeviations = deviations.filter(deviation => {
             const stageNames = this._getRelevantBlockIds(deviation);
             const stages = Array.isArray(stageNames) ? stageNames : [stageNames];
-            
+
             // Only include deviation if it involves at least one non-SequenceFlow stage
             return stages.some(stage => stage && !stage.startsWith('SequenceFlow'));
         });
@@ -220,7 +273,7 @@ class ProcessDeviationAggregation extends Job {
         filteredDeviations.forEach(deviation => {
             const stageNames = this._getRelevantBlockIds(deviation);
             const stages = Array.isArray(stageNames) ? stageNames : [stageNames];
-            
+
             stages.forEach(stage => {
                 // Filter out SequenceFlow stages from correlations
                 if (stage && !stage.startsWith('SequenceFlow')) {
@@ -242,7 +295,7 @@ class ProcessDeviationAggregation extends Job {
         const stageArray = Array.from(stagesWithDeviations)
             .filter(stage => !stage.startsWith('SequenceFlow'))
             .sort();
-        
+
         for (let i = 0; i < stageArray.length; i++) {
             for (let j = i + 1; j < stageArray.length; j++) {
                 const pair = `${stageArray[i]}-${stageArray[j]}`;
@@ -284,60 +337,6 @@ class ProcessDeviationAggregation extends Job {
     }
 
     /**
-    * Called automatically when a process event received from the monitored process 
-    * @param {Object} messageObj received process event object 
-    */
-    async handleDeviations(messageObj) {
-        try {
-            DDB.storeProcessDeviations(this.processType, messageObj.process_id, messageObj.process_perspective, messageObj.deviations)
-            await this._updateInMemoryStructures(messageObj.process_perspective, messageObj.process_id, messageObj.deviations);
-        } catch (error) {
-            console.error(`Failed to handle deviations: ${error.message}`);
-        }
-    }
-
-    /**
-    * Handle new process instance notification
-    * @param {string} instanceId New instance ID
-    */
-    async handleNewInstance(instanceId) {
-        if (!this.isInitialized) {
-            await this.initialize();
-            this.isInitialized = true;
-        }
-
-        try {
-            for (const [perspectiveName, _] of this.perspectives.entries()) {
-                if (!this.deviationData.has(perspectiveName)) {
-                    this.deviationData.set(perspectiveName, {});
-                }
-
-                // Add instance with empty deviations initially
-                this.deviationData.get(perspectiveName)[instanceId] = {
-                    instanceId: instanceId,
-                    processType: this.processType,
-                    perspective: perspectiveName,
-                    deviations: [],
-                    timestamp: Math.floor(Date.now() / 1000)
-                };
-            }
-
-            const samplePerspective = this.perspectives.keys().next().value;
-            const existingInstances = Object.keys(this.deviationData.get(samplePerspective) || {});
-            const totalInstanceCount = existingInstances.length;
-
-            for (const [perspectiveName, perspectiveInfo] of this.perspectives.entries()) {
-                const perspectiveData = this.deviationData.get(perspectiveName) || {};
-                this._buildAggregatedStructuresWithCount(perspectiveName, perspectiveData, totalInstanceCount, perspectiveInfo);
-            }
-
-            this.triggerCompleteUpdateEvent();
-        } catch (error) {
-            console.error(`Failed to handle new instance: ${error.message}`);
-        }
-    }
-
-    /**
      * Build aggregated structures with known instance count (optimization for new instances)
      * @param {string} perspectiveName Name of the perspective
      * @param {Object} instanceDeviations Deviation data for instances
@@ -351,7 +350,7 @@ class ProcessDeviationAggregation extends Job {
         let actualInstancesWithDeviations = 0;
 
         // Filter out SequenceFlow stages from the stage list
-        const allStages = perspectiveData.egsm_stages.filter(stageName => 
+        const allStages = perspectiveData.egsm_stages.filter(stageName =>
             !stageName.startsWith('SequenceFlow')
         );
 
@@ -436,8 +435,8 @@ class ProcessDeviationAggregation extends Job {
     getProcessAggregations(perspectiveName = null) {
         const result = {};
 
-        const perspectives = perspectiveName 
-            ? [perspectiveName] 
+        const perspectives = perspectiveName
+            ? [perspectiveName]
             : Array.from(this.perspectives.keys());
 
         perspectives.forEach(perspective => {
@@ -482,7 +481,7 @@ class ProcessDeviationAggregation extends Job {
     _convertSetMapToObject(map) {
         const result = {};
         if (!map) return result;
-        
+
         for (const [key, set] of map.entries()) {
             result[key] = Array.from(set);
         }
@@ -622,20 +621,17 @@ class ProcessDeviationAggregation extends Job {
         const perspectiveSummaries = [];
 
         for (const [perspectiveName, model] of this.bpmnModels.entries()) {
-            // Get BPMN diagram
             perspectives.push({
                 name: perspectiveName,
                 bpmn_xml: model.model_xml
             });
 
-            // Get overlays
             const stageData = this.stageAggregatedData.get(perspectiveName);
             if (stageData) {
                 model.applyAggregatedStatistics(stageData);
                 overlays.push(...model.getAggregatedOverlay());
             }
 
-            // Get perspective summary
             const perspectiveSummary = this.perspectiveSummary.get(perspectiveName);
             const bpmnSummary = model.getAggregatedSummary();
 
